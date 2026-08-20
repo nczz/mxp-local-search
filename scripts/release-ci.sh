@@ -6,6 +6,13 @@ if ! command -v ddev >/dev/null 2>&1; then
   exit 1
 fi
 
+scope="${MXP_RELEASE_CI_SCOPE:-full}"
+case "$scope" in
+  full|artifacts) ;;
+  *) echo "unsupported_release_ci_scope=$scope" >&2; exit 1 ;;
+esac
+
+
 $HOME/.cargo/bin/cargo fmt --all -- --check
 $HOME/.cargo/bin/cargo test --workspace
 $HOME/.cargo/bin/cargo test -p mxp-search-core --features embedding-onnx
@@ -17,6 +24,11 @@ if ! scripts/verify-model-bundle.sh >/dev/null 2>&1; then
 fi
 scripts/build-release-artifacts.sh
 scripts/verify-release-artifacts.sh
+if [ "$scope" = "artifacts" ]; then
+  echo "release_artifact_ci_ok"
+  exit 0
+fi
+
 ddev exec 'set -euo pipefail
 if ! wp --path=wordpress core is-installed >/dev/null 2>&1; then
   wp --path=wordpress core install \

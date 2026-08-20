@@ -76,8 +76,8 @@ jobs:
       - name: Start DDEV
         run: ddev start -y
 
-      - name: Build, install, smoke, and verify release artifacts
-        run: MXP_RELEASE_GIT_COMMIT="$(git rev-parse HEAD)" scripts/release-ci.sh
+      - name: Build and verify release artifacts
+        run: MXP_RELEASE_CI_SCOPE=artifacts MXP_RELEASE_GIT_COMMIT="$(git rev-parse HEAD)" scripts/release-ci.sh
 
       - name: Upload release dist
         uses: actions/upload-artifact@v4

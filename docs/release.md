@@ -96,7 +96,7 @@ scripts/rollback-release.sh --purge-data I_UNDERSTAND_DELETE_MXP_LOCAL_SEARCH_DA
 scripts/release-ci.sh
 ```
 
-This gate runs Rust formatting, Rust tests, artifact build/verify/install, PHP lint, PHP extension contract smoke, WordPress regression smoke, browser smoke, security probes, and the performance baseline. Environment-specific skips are failures unless the command explicitly prints a skip line and the skipped check is not part of release readiness.
+This local gate runs Rust formatting, Rust tests, artifact build/verify/install, PHP lint, PHP extension contract smoke, WordPress regression smoke, browser smoke, security probes, and the performance baseline. It must pass before a version bump or tag intended for publication. GitHub CI/release jobs run `MXP_RELEASE_CI_SCOPE=artifacts scripts/release-ci.sh`, which stops after building and verifying release artifacts for the target matrix.
 
 ## Current limitations
 

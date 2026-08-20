@@ -25,8 +25,8 @@ jobs:
       - name: Start DDEV
         run: ddev start -y
 
-      - name: Run release gate
-        run: scripts/release-ci.sh
+      - name: Build and verify release artifacts
+        run: MXP_RELEASE_CI_SCOPE=artifacts scripts/release-ci.sh
 
       - name: Upload release artifacts
         if: always()
