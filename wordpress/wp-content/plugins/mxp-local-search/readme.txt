@@ -1,7 +1,11 @@
 === MXP Local Search ===
 Contributors: mxp
+Tags: search, semantic search, local search, full-text search
+Requires at least: 6.4
 Requires PHP: 8.1
 Stable tag: 0.1.0
+License: MIT
+License URI: https://opensource.org/licenses/MIT
 
 MXP Local Search integrates WordPress with the mxp_search PHP extension. It fails closed when the extension is unavailable.
 

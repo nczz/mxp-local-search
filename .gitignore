@@ -21,8 +21,8 @@
 /models/*
 !/models/.gitkeep
 *.onnx
-tokenizer.json
-manifest.json
+/models/**/tokenizer.json
+/models/**/manifest.json
 *.usearch
 *.sqlite
 *.sqlite3

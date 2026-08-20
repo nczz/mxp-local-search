@@ -20,20 +20,55 @@ concurrency:
 
 jobs:
   build:
-    name: Build ${{ matrix.arch }}
+    name: Build PHP ${{ matrix.php }} ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: x86_64
+          - php: '8.1'
+            arch: x86_64
             runner: ubuntu-24.04
-          - arch: aarch64
+          - php: '8.2'
+            arch: x86_64
+            runner: ubuntu-24.04
+          - php: '8.3'
+            arch: x86_64
+            runner: ubuntu-24.04
+          - php: '8.4'
+            arch: x86_64
+            runner: ubuntu-24.04
+          - php: '8.1'
+            arch: aarch64
+            runner: ubuntu-24.04-arm
+          - php: '8.2'
+            arch: aarch64
+            runner: ubuntu-24.04-arm
+          - php: '8.3'
+            arch: aarch64
+            runner: ubuntu-24.04-arm
+          - php: '8.4'
+            arch: aarch64
             runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Configure DDEV PHP
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.ddev/config.yaml')
+          text = path.read_text()
+          old = 'php_version: "8.3"'
+          new = 'php_version: "${{ matrix.php }}"'
+          if old not in text:
+              raise SystemExit('expected DDEV php_version line not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
 
       - name: Install DDEV
         run: curl -fsSL https://ddev.com/install.sh | bash
@@ -42,17 +77,14 @@ jobs:
         run: ddev start -y
 
       - name: Build, install, smoke, and verify release artifacts
-        env:
-          MXP_RELEASE_GIT_COMMIT: ${{ github.sha }}
-        run: scripts/release-ci.sh
+        run: MXP_RELEASE_GIT_COMMIT="$(git rev-parse HEAD)" scripts/release-ci.sh
 
       - name: Upload release dist
         uses: actions/upload-artifact@v4
         with:
-          name: mxp-local-search-${{ matrix.arch }}
+          name: mxp-local-search-php${{ matrix.php }}-${{ matrix.arch }}
           path: release/dist/**
           if-no-files-found: error
-
   publish-draft:
     name: Publish draft release
     needs: build
@@ -63,6 +95,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Download release artifacts
         uses: actions/download-artifact@v4
@@ -91,7 +125,9 @@ jobs:
               version = manifest['version']
               arch = manifest['build']['arch']
               php_api = manifest['build']['php_api']
-              notes.append(f'- `{arch}` PHP API `{php_api}`')
+              php_version = manifest['build']['php_version']
+              libc = manifest['build']['libc']
+              notes.append(f'- `linux-{arch}` PHP `{php_version}` API `{php_api}` libc `{libc}`')
               for artifact in manifest['artifacts']:
                   path = release_dir / artifact['file']
                   if not path.is_file():

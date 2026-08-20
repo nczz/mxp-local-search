@@ -1,6 +1,6 @@
 # MXP Local Search
 
-Private local search engine for WordPress and PHP applications. Rust core + PHP extension.
+Open-source local search engine for WordPress and PHP applications. Rust core + PHP extension.
 
 ## What is this?
 
@@ -69,7 +69,7 @@ Verification checks:
 
 ## Release artifact workflow
 
-Release packages are machine-verifiable and platform-specific. The native extension artifact name includes the MXP version, PHP API number, Linux architecture, and recorded libc/runtime metadata.
+Release packages are machine-verifiable and platform-specific. GitHub releases build separate Linux `x86_64` and `aarch64` PHP extension artifacts for PHP 8.1, 8.2, 8.3, and 8.4; each native `.so` is valid only for the artifact's recorded PHP API, CPU architecture, libc-compatible Linux runtime, and ONNX Runtime shared library.
 
 ```bash
 scripts/build-release-artifacts.sh
@@ -146,3 +146,7 @@ The plugin loads the `mxp-local-search` text domain from `languages/`. A bundled
 - [docs/research.md](docs/research.md) — Research notes and decisions
 - [docs/release.md](docs/release.md) — Release packaging, verification, install, and rollback
 - [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — Runtime/model/dependency license notices
+
+## License
+
+MXP Local Search is released under the MIT License. See [LICENSE](LICENSE).

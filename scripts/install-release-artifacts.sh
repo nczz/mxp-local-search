@@ -3,12 +3,26 @@ set -euo pipefail
 
 release_dir="${1:-}"
 if [ -z "$release_dir" ]; then
-  release_dir=$(python3 - <<'PY'
+  current_php_api=$(ddev exec 'php-config --phpapi' 2>/dev/null | tr -d '\r')
+  current_arch=$(ddev exec 'uname -m' 2>/dev/null | tr -d '\r')
+  case "$current_arch" in aarch64|arm64) current_arch=aarch64 ;; x86_64|amd64) current_arch=x86_64 ;; *) echo "unsupported architecture: $current_arch" >&2; exit 1 ;; esac
+  release_dir=$(MXP_CURRENT_PHP_API="$current_php_api" MXP_CURRENT_ARCH="$current_arch" python3 - <<'PY'
 from pathlib import Path
+import json, os
 candidates = sorted(Path('release/dist').glob('*/mxp-local-search-*-manifest.json'), key=lambda p: p.stat().st_mtime, reverse=True)
 if not candidates:
     raise SystemExit('missing release manifest under release/dist')
-print(candidates[0].parent)
+php_api = os.environ['MXP_CURRENT_PHP_API']
+arch = os.environ['MXP_CURRENT_ARCH']
+compatible = []
+for path in candidates:
+    manifest = json.loads(path.read_text())
+    build = manifest.get('build', {})
+    if str(build.get('php_api')) == php_api and build.get('arch') == arch:
+        compatible.append(path)
+if not compatible:
+    raise SystemExit(f'missing compatible release artifact for phpapi{php_api} linux-{arch}')
+print(compatible[0].parent)
 PY
 )
 fi

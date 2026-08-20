@@ -1,6 +1,9 @@
 [package]
 name = "mxp_search"
 version = "0.1.0"
+description = "PHP native extension bindings for MXP Local Search."
+repository.workspace = true
+homepage.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true

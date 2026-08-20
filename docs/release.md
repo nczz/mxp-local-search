@@ -6,11 +6,11 @@ This project is release-ready only when the generated artifact manifest, checksu
 
 | Component | Supported release target |
 |---|---|
-| PHP | 8.1+; artifact names pin the exact PHP API number, for example `phpapi20230831` |
+| PHP | GitHub releases build separate artifacts for PHP 8.1, 8.2, 8.3, and 8.4. Each artifact pins the exact PHP API number, for example `phpapi20230831`; do not load it into another PHP API. |
 | WordPress | 6.4+ |
 | OS | Linux only for packaged native extensions |
-| CPU | `aarch64` and `x86_64`, only when built and verified on that target |
-| libc | Recorded in the release manifest; do not reuse across incompatible libc families |
+| CPU | `aarch64` and `x86_64`; each GitHub release builds and smokes both architectures on native runners |
+| libc | Recorded in the release manifest; use only on compatible glibc systems. If in doubt, run `scripts/verify-release-artifacts.sh` and `scripts/install-release-artifacts.sh` on the target host. |
 | Extension | `mxp_search` PHP extension, namespace `MXP\\Search` |
 | WordPress plugin | `mxp-local-search` |
 | REST prefix | `/wp-json/mxp-search/v1` |

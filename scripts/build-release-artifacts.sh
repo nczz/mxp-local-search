@@ -112,13 +112,24 @@ import stat, sys, zipfile
 out = Path(sys.argv[1])
 root = Path('wordpress/wp-content/plugins/mxp-local-search')
 with zipfile.ZipFile(out, 'w') as zf:
+    written = set()
     for path in sorted(root.rglob('*')):
         if path.is_file():
             rel = Path('mxp-local-search') / path.relative_to(root)
-            info = zipfile.ZipInfo(rel.as_posix(), date_time=(1980, 1, 1, 0, 0, 0))
+            name = rel.as_posix()
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = (stat.S_IMODE(path.stat().st_mode) or 0o644) << 16
             zf.writestr(info, path.read_bytes())
+            written.add(name)
+    license_path = Path('LICENSE')
+    if not license_path.is_file():
+        raise SystemExit('missing root LICENSE')
+    if 'mxp-local-search/LICENSE' not in written:
+        info = zipfile.ZipInfo('mxp-local-search/LICENSE', date_time=(1980, 1, 1, 0, 0, 0))
+        info.compress_type = zipfile.ZIP_DEFLATED
+        info.external_attr = 0o644 << 16
+        zf.writestr(info, license_path.read_bytes())
 PY
 
 model_artifact=""
@@ -187,6 +198,17 @@ manifest = {
         'cargo': cargo_version,
         'features': [part.strip() for part in features.split(',') if part.strip()],
     },
+    'compatibility': {
+        'direct_load': {
+            'os': 'linux',
+            'arch': arch,
+            'php_api': php_api,
+            'php_version_built_against': php_version,
+            'libc': libc,
+            'requires_onnxruntime_shared_library': True,
+            'onnxruntime_library_sha256': ort_lib_sha256,
+        },
+    },
     'requirements': {
         'php': '>=8.1',
         'wordpress': '>=6.4',
@@ -220,7 +242,7 @@ manifest = {
     'limitations': [
         'deep/reranker mode is not implemented and must fail closed',
         'HNSW/usearch is not claimed as production ANN unless separately benchmarked and verified',
-        'This artifact is valid only for the recorded PHP API, Linux architecture, and libc family',
+        'The PHP extension is not universal: install only on matching Linux architecture, PHP API number, libc-compatible systems, and the recorded ONNX Runtime shared library',
     ],
     'licenses': {
         'project': 'MIT',

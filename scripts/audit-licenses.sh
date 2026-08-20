@@ -2,10 +2,13 @@
 set -euo pipefail
 
 cargo_bin="${CARGO:-$HOME/.cargo/bin/cargo}"
-metadata=$("$cargo_bin" metadata --format-version 1 --locked)
-MXP_CARGO_METADATA="$metadata" python3 - <<'PY'
-import json, os
-metadata = json.loads(os.environ['MXP_CARGO_METADATA'])
+metadata_file=$(mktemp)
+trap 'rm -f "$metadata_file"' EXIT
+"$cargo_bin" metadata --format-version 1 --locked > "$metadata_file"
+python3 - "$metadata_file" <<'PY'
+import json, sys
+from pathlib import Path
+metadata = json.loads(Path(sys.argv[1]).read_text())
 reviewed = {
     'MIT', 'Apache-2.0', 'MIT OR Apache-2.0', 'Apache-2.0 OR MIT',
     'BSD-3-Clause', 'BSD-2-Clause', 'Unicode-3.0',
