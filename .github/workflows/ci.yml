@@ -19,14 +19,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install DDEV
-        run: curl -fsSL https://ddev.com/install.sh | bash
+      - name: Install PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
 
-      - name: Start DDEV
-        run: ddev start -y
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang libclang-dev pkg-config
 
       - name: Build and verify release artifacts
-        run: MXP_RELEASE_CI_SCOPE=artifacts scripts/release-ci.sh
+        run: MXP_RELEASE_BUILD_ENV=host MXP_RELEASE_CI_SCOPE=artifacts scripts/release-ci.sh
 
       - name: Upload release artifacts
         if: always()

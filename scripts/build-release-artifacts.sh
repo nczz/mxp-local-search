@@ -4,13 +4,78 @@ set -euo pipefail
 FEATURES="${MXP_SEARCH_FEATURES:-php-extension,embedding-onnx,vector-usearch}"
 DIST_ROOT="${MXP_RELEASE_DIST_ROOT:-release/dist}"
 MODEL_ID="${MXP_SEARCH_MODEL_ID:-multilingual-e5-small}"
+MODEL_ROOT="${MXP_SEARCH_MODEL_ROOT:-/var/lib/mxp-local-search/models}"
 ORT_VERSION="${ORT_VERSION:-1.17.3}"
 ORT_SHA256_AARCH64="${ORT_SHA256_AARCH64:-9f801577bd99676d1d821022e52b1f4554f56339ae3606c7b5ff3155f443c921}"
 ORT_SHA256_X64="${ORT_SHA256_X64:-f2f11f9da1e3e19b22a8b378b9af57a58433f40e3db6a803e75c0ec0eba97a20}"
 
+build_env="${MXP_RELEASE_BUILD_ENV:-auto}"
+if [ "$build_env" = "auto" ]; then
+  if command -v ddev >/dev/null 2>&1; then
+    build_env="ddev"
+  else
+    build_env="host"
+  fi
+fi
+case "$build_env" in
+  ddev|host) ;;
+  *) echo "unsupported MXP_RELEASE_BUILD_ENV=$build_env" >&2; exit 1 ;;
+esac
+if [ "$build_env" = "ddev" ] && ! command -v ddev >/dev/null 2>&1; then
+  echo "ddev_missing_release_build_env" >&2
+  exit 1
+fi
+
+run_env() {
+  if [ "$build_env" = "ddev" ]; then
+    ddev exec "$1"
+  else
+    bash -lc "$1"
+  fi
+}
+
+capture_env() {
+  run_env "$1" | tr -d '\r'
+}
+
+model_manifest_exists() {
+  if [ "$build_env" = "ddev" ]; then
+    ddev exec "test -f ${MODEL_ROOT}/${MODEL_ID}/manifest.json" >/dev/null 2>&1
+  else
+    test -f "${MODEL_ROOT}/${MODEL_ID}/manifest.json"
+  fi
+}
+
+model_manifest_field() {
+  local field="$1"
+  if [ "$build_env" = "ddev" ]; then
+    ddev exec "php -r '\$m=json_decode(file_get_contents(\"${MODEL_ROOT}/${MODEL_ID}/manifest.json\"), true); echo \$m[\"${field}\"] ?? \"unknown\";'" | tr -d '\r'
+  else
+    php -r '$m=json_decode(file_get_contents($argv[1]), true); echo $m[$argv[2]] ?? "unknown";' "${MODEL_ROOT}/${MODEL_ID}/manifest.json" "$field"
+  fi
+}
+
+model_manifest_files_json() {
+  if [ "$build_env" = "ddev" ]; then
+    ddev exec "php -r '\$m=json_decode(file_get_contents(\"${MODEL_ROOT}/${MODEL_ID}/manifest.json\"), true); echo json_encode(\$m[\"files\"] ?? []);'" | tr -d '\r'
+  else
+    php -r '$m=json_decode(file_get_contents($argv[1]), true); echo json_encode($m["files"] ?? []);' "${MODEL_ROOT}/${MODEL_ID}/manifest.json"
+  fi
+}
+
+package_model_artifact() {
+  local out="$1"
+  if [ "$build_env" = "ddev" ]; then
+    ddev exec "tar -C ${MODEL_ROOT} --sort=name --owner=0 --group=0 --numeric-owner --mtime='UTC 1980-01-01' -cf - ${MODEL_ID} | gzip -n > /var/www/html/${out}"
+  else
+    tar -C "${MODEL_ROOT}" --sort=name --owner=0 --group=0 --numeric-owner --mtime='UTC 1980-01-01' -cf - "${MODEL_ID}" | gzip -n > "$out"
+  fi
+}
+
 wait_for_stable_file() {
-  path="$1"
-  last=""
+  local path="$1"
+  local last=""
+  local current=""
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     current=$(python3 - "$path" <<'PY'
 from pathlib import Path
@@ -37,28 +102,23 @@ PY
   return 1
 }
 
+cargo_pkg_version() {
+  python3 - "$1" "$2" <<'PY'
+from pathlib import Path
+import re, sys
+path, label = sys.argv[1:]
+text = Path(path).read_text()
+match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+if not match:
+    raise SystemExit(f'missing {label} version')
+print(match.group(1))
+PY
+}
+
 mkdir -p "$DIST_ROOT"
 
-version=$(python3 - <<'PY'
-from pathlib import Path
-import re
-text = Path('crates/mxp-search-php/Cargo.toml').read_text()
-match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-if not match:
-    raise SystemExit('missing mxp_search version')
-print(match.group(1))
-PY
-)
-core_version=$(python3 - <<'PY'
-from pathlib import Path
-import re
-text = Path('crates/mxp-search-core/Cargo.toml').read_text()
-match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-if not match:
-    raise SystemExit('missing mxp-search-core version')
-print(match.group(1))
-PY
-)
+extension_version=$(cargo_pkg_version 'crates/mxp-search-php/Cargo.toml' 'mxp_search')
+core_version=$(cargo_pkg_version 'crates/mxp-search-core/Cargo.toml' 'mxp-search-core')
 plugin_version=$(python3 - <<'PY'
 from pathlib import Path
 import re
@@ -72,40 +132,39 @@ if header.group(1).strip() != const.group(1):
 print(const.group(1))
 PY
 )
-if [ "$version" != "$core_version" ] || [ "$version" != "$plugin_version" ]; then
-  echo "version mismatch: php=$version core=$core_version plugin=$plugin_version" >&2
-  exit 1
-fi
 
-php_api=$(ddev exec 'php-config --phpapi' | tr -d '\r')
-php_version=$(ddev exec "php -r 'echo PHP_VERSION;'" | tr -d '\r')
-arch=$(ddev exec 'uname -m' | tr -d '\r')
-target=$(ddev exec "rustc -Vv | sed -n 's/^host: //p'" | tr -d '\r')
-rustc_version=$(ddev exec 'rustc --version' | tr -d '\r')
-cargo_version=$(ddev exec 'cargo --version' | tr -d '\r')
-libc=$(ddev exec "ldd --version | sed -n '1p'" | tr -d '\r')
-ort_lib_sha256=$(ddev exec 'sha256sum /usr/local/lib/libonnxruntime.so | cut -d" " -f1' | tr -d '\r')
-ort_lib_bytes=$(ddev exec 'stat -c %s /usr/local/lib/libonnxruntime.so' | tr -d '\r')
+php_api=$(capture_env 'php-config --phpapi')
+php_version=$(capture_env "php -r 'echo PHP_VERSION;'")
+arch=$(capture_env 'uname -m')
+target=$(capture_env "rustc -Vv | sed -n 's/^host: //p'")
+rustc_version=$(capture_env 'rustc --version')
+cargo_version=$(capture_env 'cargo --version')
+libc=$(capture_env "ldd --version | sed -n '1p'")
+ort_lib_sha256=$(capture_env 'sha256sum /usr/local/lib/libonnxruntime.so | cut -d" " -f1')
+ort_lib_bytes=$(capture_env 'stat -c %s /usr/local/lib/libonnxruntime.so')
 case "$arch" in
   aarch64|arm64) normalized_arch="aarch64"; ort_arch="aarch64"; ort_sha256="$ORT_SHA256_AARCH64" ;;
   x86_64|amd64) normalized_arch="x86_64"; ort_arch="x64"; ort_sha256="$ORT_SHA256_X64" ;;
   *) echo "unsupported release architecture: $arch" >&2; exit 1 ;;
 esac
 
-release_dir="$DIST_ROOT/$version-phpapi${php_api}-linux-${normalized_arch}"
+release_dir="$DIST_ROOT/${extension_version}-phpapi${php_api}-linux-${normalized_arch}"
 rm -rf "$release_dir"
 mkdir -p "$release_dir"
 
-ddev mutagen sync >/dev/null 2>&1 || true
-echo "Building mxp_search release artifact: version=$version php_api=$php_api arch=$normalized_arch features=$FEATURES"
-ddev exec "cargo build --release -p mxp_search --features ${FEATURES}"
-ddev mutagen sync >/dev/null 2>&1 || true
+if [ "$build_env" = "ddev" ]; then
+  ddev mutagen sync >/dev/null 2>&1 || true
+fi
+echo "Building mxp_search release artifact: ext=$extension_version core=$core_version wp=$plugin_version php_api=$php_api arch=$normalized_arch env=$build_env features=$FEATURES"
+run_env "cargo build --release -p mxp_search --features ${FEATURES}"
+if [ "$build_env" = "ddev" ]; then
+  ddev mutagen sync >/dev/null 2>&1 || true
+fi
 
-
-extension_file="mxp_search-${version}-phpapi${php_api}-linux-${normalized_arch}.so"
+extension_file="mxp_search-${extension_version}-phpapi${php_api}-linux-${normalized_arch}.so"
 cp target/release/libmxp_search.so "$release_dir/$extension_file"
 
-plugin_zip="mxp-local-search-wp-plugin-${version}.zip"
+plugin_zip="mxp-local-search-wp-plugin-${plugin_version}.zip"
 python3 - "$release_dir/$plugin_zip" <<'PY'
 from pathlib import Path
 import stat, sys, zipfile
@@ -137,20 +196,19 @@ model_revision=""
 model_source=""
 model_files_json="[]"
 model_license="MIT"
-if [ "${MXP_INCLUDE_MODEL_ARTIFACT:-0}" = "1" ] && ddev exec "test -f /var/lib/mxp-local-search/models/${MODEL_ID}/manifest.json" >/dev/null 2>&1; then
-  model_revision=$(ddev exec "php -r '\$m=json_decode(file_get_contents(\"/var/lib/mxp-local-search/models/${MODEL_ID}/manifest.json\"), true); echo \$m[\"revision\"] ?? \"unknown\";'" | tr -d '\r')
-  model_source=$(ddev exec "php -r '\$m=json_decode(file_get_contents(\"/var/lib/mxp-local-search/models/${MODEL_ID}/manifest.json\"), true); echo \$m[\"source\"] ?? \"unknown\";'" | tr -d '\r')
-  model_files_json=$(ddev exec "php -r '\$m=json_decode(file_get_contents(\"/var/lib/mxp-local-search/models/${MODEL_ID}/manifest.json\"), true); echo json_encode(\$m[\"files\"] ?? []);'" | tr -d '\r')
-  model_artifact="mxp-local-search-model-${MODEL_ID}-${model_revision}.tar.gz"
-  ddev exec "tar -C /var/lib/mxp-local-search/models -czf /var/www/html/${release_dir}/${model_artifact} ${MODEL_ID}"
-  wait_for_stable_file "$release_dir/$model_artifact"
-else
-  if ddev exec "test -f /var/lib/mxp-local-search/models/${MODEL_ID}/manifest.json" >/dev/null 2>&1; then
-    model_revision=$(ddev exec "php -r '\$m=json_decode(file_get_contents(\"/var/lib/mxp-local-search/models/${MODEL_ID}/manifest.json\"), true); echo \$m[\"revision\"] ?? \"unknown\";'" | tr -d '\r')
-    model_source=$(ddev exec "php -r '\$m=json_decode(file_get_contents(\"/var/lib/mxp-local-search/models/${MODEL_ID}/manifest.json\"), true); echo \$m[\"source\"] ?? \"unknown\";'" | tr -d '\r')
-    model_files_json=$(ddev exec "php -r '\$m=json_decode(file_get_contents(\"/var/lib/mxp-local-search/models/${MODEL_ID}/manifest.json\"), true); echo json_encode(\$m[\"files\"] ?? []);'" | tr -d '\r')
+if model_manifest_exists; then
+  model_revision=$(model_manifest_field revision)
+  model_source=$(model_manifest_field source)
+  model_files_json=$(model_manifest_files_json)
+  if [ "${MXP_INCLUDE_MODEL_ARTIFACT:-0}" = "1" ]; then
+    model_artifact="mxp-local-search-model-${MODEL_ID}-${model_revision}.tar.gz"
+    package_model_artifact "$release_dir/$model_artifact"
+    wait_for_stable_file "$release_dir/$model_artifact"
+  else
+    echo "Model artifact omitted. Set MXP_INCLUDE_MODEL_ARTIFACT=1 to package the verified local model bundle." >&2
   fi
-  echo "Model artifact omitted. Set MXP_INCLUDE_MODEL_ARTIFACT=1 to package the verified local model bundle." >&2
+else
+  echo "Model manifest missing under ${MODEL_ROOT}/${MODEL_ID}; manifest will contain dependency metadata without file pins." >&2
 fi
 
 (
@@ -159,14 +217,14 @@ fi
   sha256sum "$extension_file" "$plugin_zip" ${model_artifact:+"$model_artifact"} > SHA256SUMS
 )
 
-python3 - "$release_dir" "$version" "$php_api" "$php_version" "$normalized_arch" "$target" "$rustc_version" "$cargo_version" "$libc" "$FEATURES" "$extension_file" "$plugin_zip" "$model_artifact" "$MODEL_ID" "$model_revision" "$model_source" "$model_license" "$model_files_json" "$ORT_VERSION" "$ort_arch" "$ort_sha256" "$ort_lib_sha256" "$ort_lib_bytes" <<'PY'
+python3 - "$release_dir" "$extension_version" "$core_version" "$plugin_version" "$php_api" "$php_version" "$normalized_arch" "$target" "$rustc_version" "$cargo_version" "$libc" "$FEATURES" "$extension_file" "$plugin_zip" "$model_artifact" "$MODEL_ID" "$model_revision" "$model_source" "$model_license" "$model_files_json" "$ORT_VERSION" "$ort_arch" "$ort_sha256" "$ort_lib_sha256" "$ort_lib_bytes" <<'PY'
 from pathlib import Path
 import hashlib, json, os, sys
 (
-    release_dir, version, php_api, php_version, arch, target, rustc_version, cargo_version,
-    libc, features, extension_file, plugin_zip, model_artifact, model_id, model_revision,
-    model_source, model_license, model_files_json, ort_version, ort_arch, ort_sha256,
-    ort_lib_sha256, ort_lib_bytes,
+    release_dir, extension_version, core_version, plugin_version, php_api, php_version,
+    arch, target, rustc_version, cargo_version, libc, features, extension_file,
+    plugin_zip, model_artifact, model_id, model_revision, model_source, model_license,
+    model_files_json, ort_version, ort_arch, ort_sha256, ort_lib_sha256, ort_lib_bytes,
 ) = sys.argv[1:]
 release = Path(release_dir)
 def sha256(name):
@@ -177,15 +235,23 @@ def sha256(name):
     return h.hexdigest()
 model_files = json.loads(model_files_json) if model_files_json else []
 artifacts = []
-for name, kind in [(extension_file, 'php_extension'), (plugin_zip, 'wordpress_plugin')]:
-    artifacts.append({'kind': kind, 'file': name, 'sha256': sha256(name), 'bytes': (release / name).stat().st_size})
+for name, kind, component in [
+    (extension_file, 'php_extension', 'php_extension'),
+    (plugin_zip, 'wordpress_plugin', 'wordpress_plugin'),
+]:
+    artifacts.append({'kind': kind, 'component': component, 'file': name, 'sha256': sha256(name), 'bytes': (release / name).stat().st_size})
 if model_artifact:
-    artifacts.append({'kind': 'model_bundle', 'file': model_artifact, 'sha256': sha256(model_artifact), 'bytes': (release / model_artifact).stat().st_size})
+    artifacts.append({'kind': 'model_bundle', 'component': 'model', 'file': model_artifact, 'sha256': sha256(model_artifact), 'bytes': (release / model_artifact).stat().st_size})
 manifest = {
-    'schema': 'mxp-local-search-release-manifest-v1',
+    'schema': 'mxp-local-search-release-manifest-v2',
     'product': 'MXP Local Search',
     'package': 'mxp-local-search',
-    'version': version,
+    'version': extension_version,
+    'components': {
+        'php_extension': {'name': 'mxp_search', 'version': extension_version},
+        'rust_core': {'name': 'mxp-search-core', 'version': core_version},
+        'wordpress_plugin': {'name': 'mxp-local-search', 'version': plugin_version},
+    },
     'git_commit': os.environ.get('MXP_RELEASE_GIT_COMMIT', 'unknown-local'),
     'build': {
         'target': target,
@@ -197,6 +263,7 @@ manifest = {
         'rustc': rustc_version,
         'cargo': cargo_version,
         'features': [part.strip() for part in features.split(',') if part.strip()],
+        'environment': os.environ.get('MXP_RELEASE_BUILD_ENV', 'auto'),
     },
     'compatibility': {
         'direct_load': {
@@ -241,7 +308,7 @@ manifest = {
     },
     'limitations': [
         'deep/reranker mode is not implemented and must fail closed',
-        'HNSW/usearch is not claimed as production ANN unless separately benchmarked and verified',
+        'HNSW/usearch is a feature-gated acceleration path; production ANN claims require separate benchmark evidence',
         'The PHP extension is not universal: install only on matching Linux architecture, PHP API number, libc-compatible systems, and the recorded ONNX Runtime shared library',
     ],
     'licenses': {
@@ -251,7 +318,7 @@ manifest = {
         'multilingual-e5-small': model_license,
     },
 }
-(release / f'mxp-local-search-{version}-manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+(release / f'mxp-local-search-{extension_version}-manifest.json').write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
 print(f'release_dir={release}')
 for artifact in artifacts:
     print(f'artifact={artifact["file"]} sha256={artifact["sha256"]} bytes={artifact["bytes"]}')
@@ -259,4 +326,4 @@ print('signing_status=unsigned-local')
 PY
 
 echo "checksums=$release_dir/SHA256SUMS"
-echo "manifest=$release_dir/mxp-local-search-${version}-manifest.json"
+echo "manifest=$release_dir/mxp-local-search-${extension_version}-manifest.json"

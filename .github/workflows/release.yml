@@ -57,27 +57,19 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
-      - name: Configure DDEV PHP
+      - name: Install PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Install native build dependencies
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('.ddev/config.yaml')
-          text = path.read_text()
-          old = 'php_version: "8.3"'
-          new = 'php_version: "${{ matrix.php }}"'
-          if old not in text:
-              raise SystemExit('expected DDEV php_version line not found')
-          path.write_text(text.replace(old, new, 1))
-          PY
-
-      - name: Install DDEV
-        run: curl -fsSL https://ddev.com/install.sh | bash
-
-      - name: Start DDEV
-        run: ddev start -y
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang libclang-dev pkg-config
 
       - name: Build and verify release artifacts
-        run: MXP_RELEASE_CI_SCOPE=artifacts MXP_RELEASE_GIT_COMMIT="$(git rev-parse HEAD)" scripts/release-ci.sh
+        run: MXP_RELEASE_BUILD_ENV=host MXP_RELEASE_CI_SCOPE=artifacts MXP_RELEASE_GIT_COMMIT="$(git rev-parse HEAD)" scripts/release-ci.sh
 
       - name: Upload release dist
         uses: actions/upload-artifact@v4
@@ -85,6 +77,7 @@ jobs:
           name: mxp-local-search-php${{ matrix.php }}-${{ matrix.arch }}
           path: release/dist/**
           if-no-files-found: error
+
   publish-draft:
     name: Publish draft release
     needs: build
@@ -127,7 +120,10 @@ jobs:
               php_api = manifest['build']['php_api']
               php_version = manifest['build']['php_version']
               libc = manifest['build']['libc']
-              notes.append(f'- `linux-{arch}` PHP `{php_version}` API `{php_api}` libc `{libc}`')
+              components = manifest.get('components', {})
+              wp_version = components.get('wordpress_plugin', {}).get('version', 'unknown')
+              core_version = components.get('rust_core', {}).get('version', 'unknown')
+              notes.append(f'- `linux-{arch}` PHP `{php_version}` API `{php_api}` libc `{libc}`; extension `{version}`, core `{core_version}`, WordPress plugin `{wp_version}`')
               for artifact in manifest['artifacts']:
                   path = release_dir / artifact['file']
                   if not path.is_file():
@@ -136,7 +132,7 @@ jobs:
                   if digest != artifact['sha256']:
                       raise SystemExit(f'sha256 mismatch: {path}')
                   target_name = path.name
-                  if artifact['kind'] == 'wordpress_plugin' or artifact['kind'] == 'model_bundle':
+                  if artifact['kind'] in {'wordpress_plugin', 'model_bundle'}:
                       previous = copied.get(target_name)
                       if previous:
                           if previous != digest:

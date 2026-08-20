@@ -20,11 +20,11 @@ macOS and non-Linux builds are source/development targets, not redistributable r
 
 ## Runtime dependencies
 
-- ONNX Runtime shared library: installed by `scripts/ddev-install-onnxruntime.sh`, pinned by version and SHA256.
+- ONNX Runtime shared library: installed by `scripts/install-onnxruntime.sh` on Ubuntu/CI hosts or `scripts/ddev-install-onnxruntime.sh` inside the local DDEV WordPress gate, pinned by version and SHA256.
 - Embedding model bundle: `multilingual-e5-small` with `model.onnx`, `tokenizer.json`, and `manifest.json`. The manifest records model id, revision/source, dimensions, file hashes, and sizes.
 - The PHP extension must be loaded through normal PHP CLI/FPM configuration. Do not claim release readiness from `php -d extension=...` only.
 - `mxp_search.store_root`, `mxp_search.export_root`, and `mxp_search.model_dir` must be outside the WordPress docroot. Model directory must be root-owned/read-only for the web user.
-
+- The PHP extension, Rust core crate, and WordPress plugin are separately versioned components. Release manifests record them under `components`; a release tag is a packaging event, not proof that all component versions must be equal.
 
 ## Ubuntu server install or build
 
@@ -42,9 +42,9 @@ php -r 'echo PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION, "\n";'
 
 2. Download the matching release directory assets:
 
-- `mxp_search-<version>-phpapi<api>-linux-<x86_64|aarch64>.so`
-- `mxp-local-search-wp-plugin-<version>.zip`
-- `mxp-local-search-<version>-manifest.json`
+- `mxp_search-<extension-version>-phpapi<api>-linux-<x86_64|aarch64>.so`
+- `mxp-local-search-wp-plugin-<plugin-version>.zip`
+- `mxp-local-search-<extension-version>-manifest.json`
 - `SHA256SUMS`
 - optional `mxp-local-search-model-multilingual-e5-small-<revision>.tar.gz`
 
@@ -64,7 +64,7 @@ EXT_DIR="$(php-config --extension-dir)"
 
 sudo install -d -m 775 -o www-data -g www-data /var/lib/mxp-local-search/kb /var/lib/mxp-local-search/export
 sudo install -d -m 755 -o root -g root /var/lib/mxp-local-search/models
-sudo install -m 755 -o root -g root mxp_search-<version>-phpapi<api>-linux-<arch>.so "$EXT_DIR/mxp_search.so"
+sudo install -m 755 -o root -g root mxp_search-<extension-version>-phpapi<api>-linux-<arch>.so "$EXT_DIR/mxp_search.so"
 
 sudo tee "/etc/php/${PHP_MM}/mods-available/mxp_search.ini" >/dev/null <<'INI'
 extension=mxp_search.so
@@ -88,13 +88,29 @@ php -r 'echo extension_loaded("mxp_search") ? "mxp_search loaded\n" : "mxp_searc
 6. Install the WordPress plugin:
 
 ```bash
-unzip mxp-local-search-wp-plugin-<version>.zip -d /path/to/wordpress/wp-content/plugins/
+unzip mxp-local-search-wp-plugin-<plugin-version>.zip -d /path/to/wordpress/wp-content/plugins/
 wp --path=/path/to/wordpress plugin activate mxp-local-search
 ```
 
 ### Build on an Ubuntu host
 
-Use this path when there is no matching release artifact. The current supported build path is DDEV, not an undocumented bare-metal Rust/PHP build.
+Use this path when there is no matching release artifact. This is also the GitHub release build path for native PHP extension artifacts; it does not use DDEV.
+
+```bash
+git clone https://github.com/nczz/mxp-local-search.git
+cd mxp-local-search
+sudo apt-get update
+sudo apt-get install -y build-essential clang libclang-dev pkg-config php-dev
+scripts/install-onnxruntime.sh
+scripts/install-model-bundle.sh
+MXP_RELEASE_BUILD_ENV=host MXP_RELEASE_CI_SCOPE=artifacts scripts/release-ci.sh
+```
+
+The generated artifact lands under `release/dist/<extension-version>-phpapi<api>-linux-<arch>/`. Install that directory with the direct-install steps above.
+
+### Local DDEV WordPress collaboration gate
+
+Use this path before bumping any component version or publishing a tag. It proves the WordPress plugin integration contract against the local DDEV stack; it is not the GitHub native-extension build environment.
 
 ```bash
 git clone https://github.com/nczz/mxp-local-search.git
@@ -102,11 +118,10 @@ cd mxp-local-search
 ddev start -y
 scripts/ddev-install-onnxruntime.sh
 scripts/ddev-install-model-bundle.sh
-scripts/build-release-artifacts.sh
-scripts/verify-release-artifacts.sh
+scripts/release-ci.sh
 ```
 
-The generated artifact lands under `release/dist/<version>-phpapi<api>-linux-<arch>/`. Install that directory with the direct-install steps above or, in the DDEV environment only, use `scripts/install-release-artifacts.sh`.
+The DDEV gate runs the full WordPress operational smoke suite after artifact build/verify/install.
 
 ## Build artifacts
 
@@ -116,15 +131,15 @@ Run from the repository root:
 scripts/build-release-artifacts.sh
 ```
 
-The script builds the native PHP extension in DDEV and writes artifacts under `release/dist/<version>-phpapi<api>-linux-<arch>/`:
+The script builds the native PHP extension on the selected build environment and writes artifacts under `release/dist/<extension-version>-phpapi<api>-linux-<arch>/`:
 
-- `mxp_search-<version>-phpapi<api>-linux-<arch>.so`
-- `mxp-local-search-wp-plugin-<version>.zip`
+- `mxp_search-<extension-version>-phpapi<api>-linux-<arch>.so`
+- `mxp-local-search-wp-plugin-<plugin-version>.zip`
 - optional `mxp-local-search-model-multilingual-e5-small-<revision>.tar.gz` when the verified model bundle is present
-- `mxp-local-search-<version>-manifest.json`
+- `mxp-local-search-<extension-version>-manifest.json`
 - `SHA256SUMS`
 
-The manifest is machine-readable and includes version, platform, PHP API, feature flags, runtime dependency versions and hashes, artifact hashes, license summary, limitations, and signing status.
+The manifest is machine-readable and includes platform, PHP API, feature flags, runtime dependency versions and hashes, component versions, artifact hashes, license summary, limitations, and signing status.
 
 ## Signing status
 
@@ -179,10 +194,10 @@ scripts/rollback-release.sh --purge-data I_UNDERSTAND_DELETE_MXP_LOCAL_SEARCH_DA
 scripts/release-ci.sh
 ```
 
-This local gate runs Rust formatting, Rust tests, artifact build/verify/install, PHP lint, PHP extension contract smoke, WordPress regression smoke, browser smoke, security probes, and the performance baseline. It must pass before a version bump or tag intended for publication. GitHub CI/release jobs run `MXP_RELEASE_CI_SCOPE=artifacts scripts/release-ci.sh`, which stops after building and verifying release artifacts for the target matrix.
+This local gate runs Rust formatting, Rust tests, artifact build/verify/install, PHP lint, PHP extension contract smoke, WordPress regression smoke, browser smoke, security probes, and the performance baseline. It must pass before a version bump or tag intended for publication. GitHub CI/release jobs run `MXP_RELEASE_BUILD_ENV=host MXP_RELEASE_CI_SCOPE=artifacts scripts/release-ci.sh`, which stops after building and verifying release artifacts for the target matrix without DDEV.
 
 ## Current limitations
 
-- `deep`/reranker mode is intentionally unsupported and must fail closed.
+- `deep`/reranker mode is intentionally unsupported and must fail closed. Do not expose it as a stable feature until the reranker model, API contract, tests, and CPU/latency guardrails exist.
 - HNSW/usearch is a feature-gated acceleration path. Do not claim production ANN performance until a larger benchmark proves recall/latency and rebuild recovery.
-- Release artifacts are currently built and verified only in the DDEV Linux target used by the manifest.
+- Published stable artifacts still need a signing/attestation implementation. `unsigned-local` artifacts are acceptable for internal/pre-release validation only.

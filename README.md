@@ -55,8 +55,8 @@ The DDEV post-start hook mirrors the install contract:
 
 The supported local model bundle is `multilingual-e5-small` from `intfloat/multilingual-e5-small`, pinned by revision and verified by `manifest.json` file hashes before embedder startup.
 
-```bash
-scripts/ddev-install-model-bundle.sh
+scripts/install-model-bundle.sh            # Ubuntu/CI host
+scripts/ddev-install-model-bundle.sh       # local DDEV WordPress gate
 scripts/verify-model-bundle.sh
 ```
 
@@ -78,24 +78,26 @@ scripts/install-release-artifacts.sh
 scripts/release-upgrade-smoke.sh
 ```
 
-The build writes `release/dist/<version>-phpapi<api>-linux-<arch>/` with:
+The build writes `release/dist/<extension-version>-phpapi<api>-linux-<arch>/` with independently versioned components:
 
-- `mxp_search-<version>-phpapi<api>-linux-<arch>.so`
-- `mxp-local-search-wp-plugin-<version>.zip`
-- `mxp-local-search-<version>-manifest.json`
+- `mxp_search-<extension-version>-phpapi<api>-linux-<arch>.so`
+- `mxp-local-search-wp-plugin-<plugin-version>.zip`
+- `mxp-local-search-<extension-version>-manifest.json`
 - `SHA256SUMS`
 - optional checksum-pinned `mxp-local-search-model-multilingual-e5-small-<revision>.tar.gz`
 
-Local builds are marked `unsigned-local`; checksums are not signatures. Formal releases need detached signatures or an equivalent signing step before distribution.
+The PHP extension, `mxp-search-core`, and WordPress plugin each keep their own version. The release manifest records all three under `components`; only the WordPress plugin header and `MXP_LOCAL_SEARCH_VERSION` constant must match each other.
 
-Use `scripts/release-ci.sh` for the local release gate before version bumps or publishable tags: Rust fmt/tests, release artifact build/verify/install, PHP lint, PHP extension contract smoke, WordPress regression smoke, security probes, and performance baseline. GitHub CI/release jobs use `MXP_RELEASE_CI_SCOPE=artifacts` to build and verify distributable artifacts without running the full DDEV operational smoke suite.
+Local builds are marked `unsigned-local`; checksums are not signatures. Formal stable releases need detached signatures or an equivalent signing/attestation step before distribution.
+
+Use `scripts/release-ci.sh` for the local release gate before version bumps or publishable tags: Rust fmt/tests, release artifact build/verify/install, PHP lint, PHP extension contract smoke, WordPress regression smoke, security probes, and performance baseline. GitHub CI/release jobs use `MXP_RELEASE_BUILD_ENV=host MXP_RELEASE_CI_SCOPE=artifacts` to build and verify distributable PHP extension artifacts directly on the target Ubuntu/PHP matrix without DDEV.
 
 ### Ubuntu install paths
 
 There are two supported paths today:
 
 1. **Use GitHub release artifacts** for production-like installs. Pick the `.so` whose filename matches the target host's `php-config --phpapi` and CPU architecture (`x86_64` or `aarch64`). The `.so` is not universal across PHP minor/API versions.
-2. **Build on the target Ubuntu host through DDEV** when no matching artifact exists. This uses the same containerized toolchain as CI, so the resulting artifact records the host PHP API, architecture, glibc family, ONNX Runtime hash, and model hash in its manifest.
+2. **Build on the target Ubuntu host** when no matching artifact exists. Install native build dependencies plus `php-config`, then run the host artifact gate. DDEV remains the required local WordPress collaboration gate before version bumps, not the GitHub/native extension build environment.
 
 For direct installs, install the matching ONNX Runtime shared library and `multilingual-e5-small` model bundle first, then copy the release `.so` into `php-config --extension-dir`, create an `mxp_search.ini`, enable it for CLI/FPM, install the `mxp-local-search` WordPress plugin zip, and verify with:
 

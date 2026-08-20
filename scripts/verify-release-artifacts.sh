@@ -1,15 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+build_env="${MXP_RELEASE_BUILD_ENV:-auto}"
+if [ "$build_env" = "auto" ]; then
+  if command -v ddev >/dev/null 2>&1; then
+    build_env="ddev"
+  else
+    build_env="host"
+  fi
+fi
+case "$build_env" in
+  ddev|host) ;;
+  *) echo "unsupported MXP_RELEASE_BUILD_ENV=$build_env" >&2; exit 1 ;;
+esac
+
+capture_env() {
+  if [ "$build_env" = "ddev" ]; then
+    ddev exec "$1" 2>/dev/null | tr -d '\r' || true
+  else
+    bash -lc "$1" 2>/dev/null | tr -d '\r' || true
+  fi
+}
+
 release_dir="${1:-}"
 if [ -z "$release_dir" ]; then
-  current_php_api=""
-  current_arch=""
-  if command -v ddev >/dev/null 2>&1; then
-    current_php_api=$(ddev exec 'php-config --phpapi' 2>/dev/null | tr -d '\r' || true)
-    current_arch=$(ddev exec 'uname -m' 2>/dev/null | tr -d '\r' || true)
-    case "$current_arch" in aarch64|arm64) current_arch=aarch64 ;; x86_64|amd64) current_arch=x86_64 ;; esac
-  fi
+  current_php_api=$(capture_env 'php-config --phpapi')
+  current_arch=$(capture_env 'uname -m')
+  case "$current_arch" in aarch64|arm64) current_arch=aarch64 ;; x86_64|amd64) current_arch=x86_64 ;; esac
   release_dir=$(MXP_CURRENT_PHP_API="$current_php_api" MXP_CURRENT_ARCH="$current_arch" python3 - <<'PY'
 from pathlib import Path
 import json, os
@@ -48,14 +65,18 @@ import hashlib, json, os, sys
 manifest_path = Path(sys.argv[1])
 release_dir = manifest_path.parent
 manifest = json.loads(manifest_path.read_text())
-required = ['schema', 'product', 'package', 'version', 'build', 'artifacts', 'signing', 'runtime_dependencies', 'requirements']
+required = ['schema', 'product', 'package', 'version', 'components', 'build', 'artifacts', 'signing', 'runtime_dependencies', 'requirements']
 missing = [key for key in required if key not in manifest]
 if missing:
     raise SystemExit(f'manifest missing keys: {missing}')
-if manifest['schema'] != 'mxp-local-search-release-manifest-v1':
+if manifest['schema'] not in {'mxp-local-search-release-manifest-v2'}:
     raise SystemExit('unsupported manifest schema')
 if manifest['product'] != 'MXP Local Search' or manifest['package'] != 'mxp-local-search':
     raise SystemExit('manifest product/package mismatch')
+components = manifest['components']
+for key in ['php_extension', 'rust_core', 'wordpress_plugin']:
+    if key not in components or not components[key].get('version'):
+        raise SystemExit(f'manifest missing component version: {key}')
 runtime = manifest['runtime_dependencies']
 onnx = runtime.get('onnxruntime') or {}
 if not onnx.get('library_sha256') or not onnx.get('library_bytes'):
@@ -74,7 +95,7 @@ expected_model_files = {
 }
 model = runtime.get('model') or {}
 if model.get('id') != expected_model_id or model.get('revision') != expected_model_revision:
-    raise SystemExit('manifest model identity mismatch')
+    raise SystemExit('manifest model id/revision mismatch')
 model_files = {item.get('path'): item for item in model.get('files') or []}
 for name, (expected_hash, expected_size) in expected_model_files.items():
     item = model_files.get(name)
@@ -85,7 +106,7 @@ for name, (expected_hash, expected_size) in expected_model_files.items():
 for artifact in manifest['artifacts']:
     path = release_dir / artifact['file']
     if not path.is_file():
-        raise SystemExit(f'missing artifact: {path}')
+        raise SystemExit(f'missing artifact file: {path.name}')
     actual = hashlib.sha256(path.read_bytes()).hexdigest()
     if actual != artifact['sha256']:
         raise SystemExit(f'sha256 mismatch: {path.name}')
@@ -108,53 +129,51 @@ for line in checksums.read_text().splitlines():
 status = manifest['signing'].get('status')
 if status != 'unsigned-local':
     raise SystemExit('signed releases require signature verification support; only unsigned-local is accepted')
-print(f'manifest_ok version={manifest["version"]} artifacts={len(manifest["artifacts"])} signing={status}')
+print(f'manifest_ok version={manifest["version"]} components={components} artifacts={len(manifest["artifacts"])} signing={status}')
 for artifact in manifest['artifacts']:
     print(f'artifact_ok {artifact["kind"]} {artifact["file"]}')
 PY
 
-if command -v ddev >/dev/null 2>&1; then
-  expected_php_api=$(python3 - "$manifest" <<'PY'
+expected_php_api=$(python3 - "$manifest" <<'PY'
 import json, sys
 print(json.load(open(sys.argv[1]))['build']['php_api'])
 PY
 )
-  expected_arch=$(python3 - "$manifest" <<'PY'
+expected_arch=$(python3 - "$manifest" <<'PY'
 import json, sys
 print(json.load(open(sys.argv[1]))['build']['arch'])
 PY
 )
-  expected_ort_lib_sha=$(python3 - "$manifest" <<'PY'
+expected_ort_lib_sha=$(python3 - "$manifest" <<'PY'
 import json, sys
 print(json.load(open(sys.argv[1]))['runtime_dependencies']['onnxruntime']['library_sha256'])
 PY
 )
-  expected_ort_lib_bytes=$(python3 - "$manifest" <<'PY'
+expected_ort_lib_bytes=$(python3 - "$manifest" <<'PY'
 import json, sys
 print(json.load(open(sys.argv[1]))['runtime_dependencies']['onnxruntime']['library_bytes'])
 PY
 )
-  current_php_api=$(ddev exec 'php-config --phpapi' | tr -d '\r')
-  current_arch=$(ddev exec 'uname -m' | tr -d '\r')
-  case "$current_arch" in aarch64|arm64) current_arch=aarch64 ;; x86_64|amd64) current_arch=x86_64 ;; esac
-  if [ "$expected_php_api" != "$current_php_api" ]; then
-    echo "php api mismatch: manifest=$expected_php_api current=$current_php_api" >&2
-    exit 1
-  fi
-  if [ "$expected_arch" != "$current_arch" ]; then
-    echo "architecture mismatch: manifest=$expected_arch current=$current_arch" >&2
-    exit 1
-  fi
-  current_ort_lib_sha=$(ddev exec 'sha256sum /usr/local/lib/libonnxruntime.so | cut -d" " -f1' | tr -d '\r')
-  current_ort_lib_bytes=$(ddev exec 'stat -c %s /usr/local/lib/libonnxruntime.so' | tr -d '\r')
-  if [ "$expected_ort_lib_sha" != "$current_ort_lib_sha" ] || [ "$expected_ort_lib_bytes" != "$current_ort_lib_bytes" ]; then
-    echo "ONNX Runtime library mismatch: manifest=${expected_ort_lib_sha}/${expected_ort_lib_bytes} current=${current_ort_lib_sha}/${current_ort_lib_bytes}" >&2
-    exit 1
-  fi
-  echo "onnxruntime_shared_library=1 sha256=$current_ort_lib_sha"
-  scripts/verify-model-bundle.sh
-else
-  echo "ddev_missing_skip_runtime_verification"
+current_php_api=$(capture_env 'php-config --phpapi')
+current_arch=$(capture_env 'uname -m')
+case "$current_arch" in aarch64|arm64) current_arch=aarch64 ;; x86_64|amd64) current_arch=x86_64 ;; esac
+if [ -n "$current_php_api" ] && [ "$expected_php_api" != "$current_php_api" ]; then
+  echo "php api mismatch: manifest=$expected_php_api current=$current_php_api" >&2
+  exit 1
 fi
+if [ -n "$current_arch" ] && [ "$expected_arch" != "$current_arch" ]; then
+  echo "architecture mismatch: manifest=$expected_arch current=$current_arch" >&2
+  exit 1
+fi
+current_ort_lib_sha=$(capture_env 'sha256sum /usr/local/lib/libonnxruntime.so | cut -d" " -f1')
+current_ort_lib_bytes=$(capture_env 'stat -c %s /usr/local/lib/libonnxruntime.so')
+if [ -n "$current_ort_lib_sha" ] && { [ "$expected_ort_lib_sha" != "$current_ort_lib_sha" ] || [ "$expected_ort_lib_bytes" != "$current_ort_lib_bytes" ]; }; then
+  echo "ONNX Runtime library mismatch: manifest=${expected_ort_lib_sha}/${expected_ort_lib_bytes} current=${current_ort_lib_sha}/${current_ort_lib_bytes}" >&2
+  exit 1
+fi
+if [ -n "$current_ort_lib_sha" ]; then
+  echo "onnxruntime_shared_library=1 sha256=$current_ort_lib_sha"
+fi
+MXP_RELEASE_BUILD_ENV="$build_env" scripts/verify-model-bundle.sh
 
 echo "release_artifacts_verify_ok"
