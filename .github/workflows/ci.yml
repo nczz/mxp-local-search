@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-gate:
+    name: Release gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install DDEV
+        run: curl -fsSL https://ddev.com/install.sh | bash
+
+      - name: Start DDEV
+        run: ddev start -y
+
+      - name: Run release gate
+        run: scripts/release-ci.sh
+
+      - name: Upload release artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-release-dist
+          path: release/dist/**
+          if-no-files-found: ignore

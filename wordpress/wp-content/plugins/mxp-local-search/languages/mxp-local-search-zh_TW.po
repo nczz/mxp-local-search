@@ -1,0 +1,407 @@
+msgid ""
+msgstr ""
+
+msgid "%d documents / %d chunks"
+msgstr "%d 份文件 / %d 個片段"
+
+msgid "Actions"
+msgstr "操作"
+
+msgid "Anonymous public search cannot use deep mode."
+msgstr "匿名公開搜尋不能使用 deep 模式。"
+
+msgid "Background indexing"
+msgstr "背景索引"
+
+msgid "Background indexing completed."
+msgstr "背景索引已完成。"
+
+msgid "Background indexing has been scheduled."
+msgstr "已排程背景索引。"
+
+msgid "Background indexing is running."
+msgstr "背景索引正在執行。"
+
+msgid "Background settings reindex completed with errors."
+msgstr "背景設定重建索引已完成，但有錯誤。"
+
+msgid "Background settings reindex completed."
+msgstr "背景設定重建索引已完成。"
+
+msgid "Background settings reindex is running."
+msgstr "背景設定重建索引正在執行。"
+
+msgid "Browser smoke check"
+msgstr "瀏覽器 smoke 檢查"
+
+msgid "Builds or refreshes the local search index for the selected post types. This does not enable built-in search replacement by itself."
+msgstr "建立或更新所選內容類型的本機搜尋索引。這不會自動啟用內建搜尋接管。"
+
+msgid "Built-in WordPress search"
+msgstr "WordPress 內建搜尋"
+
+msgid "Built-in search replacement"
+msgstr "內建搜尋接管"
+
+msgid "Chunk strategy"
+msgstr "切片策略"
+
+msgid "Comma-separated post meta keys to index. Keep this explicit; sensitive-looking keys such as secret, token, password, email, and phone are skipped."
+msgstr "以逗號分隔要索引的 post meta key。請明確列出；看起來敏感的 key，例如 secret、token、password、email、phone，會被略過。"
+
+msgid "Comments"
+msgstr "留言"
+
+msgid "Completed at %s"
+msgstr "完成時間：%s"
+
+msgid "Controls how posts are split before indexing. Changing this schedules a background reindex."
+msgstr "控制文章在索引前如何切片。變更此設定會排程背景重建索引。"
+
+msgid "Could not schedule MXP Local Search indexing."
+msgstr "無法排程 MXP 本機搜尋索引。"
+
+msgid "Could not schedule MXP Local Search reindex."
+msgstr "無法排程 MXP 本機搜尋重建索引。"
+
+msgid "Custom fields allowlist"
+msgstr "自訂欄位允許清單"
+
+msgid "Deep mode requires the mxp_search reranker feature."
+msgstr "deep 模式需要 mxp_search reranker 功能。"
+
+msgid "Exclude this post from MXP Local Search"
+msgstr "從 MXP 本機搜尋排除此文章"
+
+msgid "Excluded"
+msgstr "已排除"
+
+msgid "Export requires an explicit confirmation token."
+msgstr "匯出需要明確的確認 token。"
+
+msgid "Extension"
+msgstr "擴充套件"
+
+msgid "Heading"
+msgstr "標題"
+
+msgid "Import requires an explicit confirmation token."
+msgstr "匯入需要明確的確認 token。"
+
+msgid "Index All Posts"
+msgstr "索引所有文章"
+
+msgid "Index All Posts Now"
+msgstr "立即索引所有文章"
+
+msgid "Index all posts"
+msgstr "索引所有文章"
+
+msgid "Index approved comments. This can expose commenter content in search."
+msgstr "索引已核准留言。這可能讓留言者內容出現在搜尋中。"
+
+msgid "Index categories, tags, product attributes, and other taxonomy terms for selected post types."
+msgstr "索引所選內容類型的分類、標籤、產品屬性與其他分類法詞彙。"
+
+msgid "Indexed %1$d / Deleted %2$d / Errors %3$d"
+msgstr "已索引 %1$d / 已刪除 %2$d / 錯誤 %3$d"
+
+msgid "Indexed %1$d posts; deleted %2$d non-indexable posts; errors %3$d."
+msgstr "已索引 %1$d 篇文章；已刪除 %2$d 筆不可索引文章；錯誤 %3$d 筆。"
+
+msgid "Indexed (%d chunks)"
+msgstr "已索引（%d 個片段）"
+
+msgid "Knowledge base"
+msgstr "知識庫"
+
+msgid "Last indexed: %s"
+msgstr "最後索引：%s"
+
+msgid "Last operation"
+msgstr "最後操作"
+
+msgid "Leave blank to use the current post."
+msgstr "留空即可使用目前文章。"
+
+msgid "Leave empty to hide the heading."
+msgstr "留空即可隱藏標題。"
+
+msgid "MXP Local Search"
+msgstr "MXP 本機搜尋"
+
+msgid "MXP Local Search Indexing"
+msgstr "MXP 本機搜尋索引"
+
+msgid "MXP Local Search is already running a write or rebuild operation."
+msgstr "MXP 本機搜尋已有寫入或重建作業正在執行。"
+
+msgid "MXP Local Search management requests require a valid REST nonce or application password."
+msgstr "MXP 本機搜尋管理請求需要有效的 REST nonce 或應用程式密碼。"
+
+msgid "MXP Local Search path must stay inside the configured root."
+msgstr "MXP 本機搜尋路徑必須位於已設定的根目錄內。"
+
+msgid "MXP Local Search queued this post for reindexing because another write or rebuild job is running."
+msgstr "MXP 本機搜尋已將此文章排入重建索引佇列，因為另一個寫入或重建作業正在執行。"
+
+msgid "MXP Local Search reindexed this post."
+msgstr "MXP 本機搜尋已重新索引此文章。"
+
+msgid "MXP Local Search removed this post from the index."
+msgstr "MXP 本機搜尋已將此文章從索引移除。"
+
+msgid "MXP Local Search requires the mxp_search PHP extension. Indexing, rebuilds, and search fail closed until the extension is installed and loaded."
+msgstr "MXP 本機搜尋需要 mxp_search PHP 擴充套件。安裝並載入擴充套件前，索引、重建與搜尋會安全地停止。"
+
+msgid "MXP Local Search settings saved."
+msgstr "MXP 本機搜尋設定已儲存。"
+
+msgid "MXP Local Search settings saved. No index rebuild was needed."
+msgstr "MXP 本機搜尋設定已儲存。不需要重建索引。"
+
+msgid "MXP Local Search storage root is invalid."
+msgstr "MXP 本機搜尋的儲存根目錄無效。"
+
+msgid "MXP Local Search storage root is not writable."
+msgstr "MXP 本機搜尋的儲存根目錄無法寫入。"
+
+msgid "MXP Local Search store root is not writable."
+msgstr "MXP 本機搜尋的索引儲存根目錄無法寫入。"
+
+msgid "MXP Related Articles"
+msgstr "MXP 相關文章"
+
+msgid "MXP index"
+msgstr "MXP 索引"
+
+msgid "Manual indexing completed."
+msgstr "手動索引已完成。"
+
+msgid "Manual run completed: %1$d indexing jobs, %2$d settings reindex jobs, %3$d single-post reindex jobs."
+msgstr "手動執行已完成：%1$d 個索引工作，%2$d 個設定重建索引工作，%3$d 個單篇重建索引工作。"
+
+msgid "Manual run completed: %1$d indexing jobs, %2$d settings reindex jobs."
+msgstr "手動執行已完成：%1$d 個索引工作，%2$d 個設定重建索引工作。"
+
+msgid "Manual scheduled jobs run"
+msgstr "手動執行排程工作"
+
+msgid "Manual scheduled jobs run completed: %1$d indexing jobs, %2$d settings reindex jobs, %3$d errors."
+msgstr "手動排程工作已完成：%1$d 個索引工作，%2$d 個設定重建索引工作，%3$d 個錯誤。"
+
+msgid "Manual scheduled jobs run completed: %1$d indexing jobs, %2$d settings reindex jobs, %3$d single-post reindex jobs, %4$d errors."
+msgstr "手動排程工作已完成：%1$d 個索引工作，%2$d 個設定重建索引工作，%3$d 個單篇重建索引工作，%4$d 個錯誤。"
+
+msgid "Model"
+msgstr "模型"
+
+msgid "No related articles found yet. Index related content first, then refresh the preview."
+msgstr "尚未找到相關文章。請先索引相關內容，然後重新整理預覽。"
+
+msgid "Not indexable"
+msgstr "不可索引"
+
+msgid "Not indexed"
+msgstr "尚未索引"
+
+msgid "Number of articles"
+msgstr "文章數量"
+
+msgid "Off by default. Leave this disabled while configuring, testing, or temporarily using the normal WordPress search. Shortcodes and REST search still work when this is off."
+msgstr "預設關閉。設定中、測試中，或暫時想使用一般 WordPress 搜尋時，請保持停用。此設定關閉時，shortcode 與 REST 搜尋仍可使用。"
+
+msgid "Plugin version"
+msgstr "外掛版本"
+
+msgid "Post not found."
+msgstr "找不到文章。"
+
+msgid "Post reindex is queued because MXP is currently running another write job."
+msgstr "單篇重建索引已排入佇列，因為 MXP 目前正在執行其他寫入作業。"
+
+msgid "Post reindex is waiting for the current MXP write job to finish."
+msgstr "單篇重建索引正在等待目前的 MXP 寫入作業完成。"
+
+msgid "Post types"
+msgstr "內容類型"
+
+msgid "Rebuild requires an explicit confirmation token."
+msgstr "重建需要明確的確認 token。"
+
+msgid "Rebuild requires confirm=rebuild."
+msgstr "重建需要 confirm=rebuild。"
+
+msgid "Reindex now"
+msgstr "立即重新索引"
+
+msgid "Reindex this post now"
+msgstr "立即重新索引此文章"
+
+msgid "Related articles"
+msgstr "相關文章"
+
+msgid "Related articles settings"
+msgstr "相關文章設定"
+
+msgid "Replace the public WordPress search results page with MXP Local Search results."
+msgstr "使用 MXP 本機搜尋結果取代公開的 WordPress 搜尋結果頁。"
+
+msgid "Run Scheduled MXP Jobs Now"
+msgstr "立即執行已排程的 MXP 工作"
+
+msgid "Save Settings"
+msgstr "儲存設定"
+
+msgid "Scheduled for %s"
+msgstr "排程時間：%s"
+
+msgid "Score: %.3f"
+msgstr "分數：%.3f"
+
+msgid "Search"
+msgstr "搜尋"
+
+msgid "Search knowledge base"
+msgstr "搜尋知識庫"
+
+msgid "Search mode"
+msgstr "搜尋模式"
+
+msgid "Search query cannot be empty."
+msgstr "搜尋查詢不可為空。"
+
+msgid "Search query is too long."
+msgstr "搜尋查詢過長。"
+
+msgid "Search settings saved. A background reindex has been scheduled so this page does not wait for embedding work."
+msgstr "搜尋設定已儲存。已排程背景重建索引，因此此頁不會等待 embedding 工作完成。"
+
+msgid "Select the public content types to index. WooCommerce products appear here when WooCommerce registers the product post type; public products include SKU, price, stock status, attributes, taxonomies, and configured custom fields."
+msgstr "選擇要索引的公開內容類型。WooCommerce 註冊 product 內容類型後，產品會出現在這裡；公開產品會包含 SKU、價格、庫存狀態、屬性、分類法與已設定的自訂欄位。"
+
+msgid "Semantic search requires the mxp_search ONNX feature."
+msgstr "語意搜尋需要 mxp_search ONNX 功能。"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "Settings reindex"
+msgstr "設定重建索引"
+
+msgid "Settings save"
+msgstr "設定儲存"
+
+msgid "Settings saved; background reindex has been scheduled."
+msgstr "設定已儲存；已排程背景重建索引。"
+
+msgid "Settings saved; background reindex is already scheduled."
+msgstr "設定已儲存；背景重建索引已排程。"
+
+msgid "Settings saved; no index-affecting fields changed."
+msgstr "設定已儲存；沒有會影響索引的欄位變更。"
+
+msgid "Show semantically related articles from the MXP Local Search index."
+msgstr "從 MXP 本機搜尋索引顯示語意相關文章。"
+
+msgid "Single post indexing"
+msgstr "單篇文章索引"
+
+msgid "Single post indexing completed."
+msgstr "單篇文章索引已完成。"
+
+msgid "Single post reindex is running."
+msgstr "單篇重建索引正在執行。"
+
+msgid "Site default"
+msgstr "網站預設"
+
+msgid "Source post ID"
+msgstr "來源文章 ID"
+
+msgid "Status"
+msgstr "狀態"
+
+msgid "Status: excluded. Saving or reindexing removes existing chunks."
+msgstr "狀態：已排除。儲存或重新索引會移除既有片段。"
+
+msgid "Status: indexed (%d chunks)."
+msgstr "狀態：已索引（%d 個片段）。"
+
+msgid "Status: not indexed yet, or not currently indexable by global settings."
+msgstr "狀態：尚未索引，或目前全域設定不允許索引。"
+
+msgid "Taxonomies"
+msgstr "分類法"
+
+msgid "The mxp_search PHP extension is required for MXP Local Search."
+msgstr "MXP 本機搜尋需要 mxp_search PHP 擴充套件。"
+
+msgid "The requested MXP Local Search path does not exist."
+msgstr "指定的 MXP 本機搜尋路徑不存在。"
+
+msgid "The requested MXP Local Search path parent does not exist."
+msgstr "指定的 MXP 本機搜尋路徑上層目錄不存在。"
+
+msgid "This dynamic block renders related articles on the front end using the MXP Local Search index."
+msgstr "這個動態區塊會在前台使用 MXP 本機搜尋索引呈現相關文章。"
+
+msgid "Too many MXP Local Search requests."
+msgstr "MXP 本機搜尋請求過多。"
+
+msgid "Unknown MXP Local Search fields: %s"
+msgstr "未知的 MXP 本機搜尋欄位：%s"
+
+msgid "Use this for one-off fixes after editing important content. Global settings and public visibility still apply."
+msgstr "編輯重要內容後，可用於單次修正。全域設定與公開可見性仍會套用。"
+
+msgid "Use this when WP-Cron is disabled or unreliable. It immediately runs pending MXP indexing and settings-reindex jobs that WordPress has scheduled."
+msgstr "當 WP-Cron 停用或不穩定時使用。這會立即執行 WordPress 已排程但尚未執行的 MXP 索引與設定重建索引工作。"
+
+msgid "You cannot manage MXP Local Search."
+msgstr "你沒有權限管理 MXP 本機搜尋。"
+
+msgid "completed"
+msgstr "已完成"
+
+msgid "completed with errors"
+msgstr "已完成但有錯誤"
+
+msgid "disabled"
+msgstr "已停用"
+
+msgid "enabled"
+msgstr "已啟用"
+
+msgid "failed"
+msgstr "失敗"
+
+msgid "fast uses SQLite full-text search; semantic uses vectors; hybrid combines both; deep adds reranking when the native extension supports it."
+msgstr "fast 使用 SQLite 全文搜尋；semantic 使用向量；hybrid 結合兩者；deep 會在原生擴充套件支援時加入 reranking。"
+
+msgid "fixed: uses fixed-size text windows; fallback for unstructured content, but can cut through sentences."
+msgstr "fixed：使用固定大小文字視窗；適合無結構內容，但可能切斷句子。"
+
+msgid "heading: starts chunks at headings; useful for documentation pages with structured sections."
+msgstr "heading：從標題開始建立片段；適合有章節結構的文件頁面。"
+
+msgid "idle"
+msgstr "閒置"
+
+msgid "missing"
+msgstr "缺少"
+
+msgid "mxp_search loaded"
+msgstr "mxp_search 已載入"
+
+msgid "paragraph: splits on paragraph boundaries; predictable for long prose with clear blank lines."
+msgstr "paragraph：依段落邊界切分；適合空行明確的長篇文字。"
+
+msgid "running"
+msgstr "執行中"
+
+msgid "scheduled"
+msgstr "已排程"
+
+msgid "smart: keeps headings and nearby paragraphs together; best default for mixed article/product content."
+msgstr "smart：保留標題與相鄰段落的關聯；適合混合文章與商品內容的預設策略。"

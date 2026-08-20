@@ -1,0 +1,21 @@
+[package]
+name = "mxp_search"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "mxp_search"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+php-extension = ["dep:ext-php-rs"]
+embedding-onnx = ["mxp-search-core/embedding-onnx"]
+vector-usearch = ["mxp-search-core/vector-usearch"]
+
+[dependencies]
+mxp-search-core.workspace = true
+ext-php-rs = { version = "0.13", optional = true }
+serde_json.workspace = true

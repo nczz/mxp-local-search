@@ -1,0 +1,30 @@
+[tools]
+rust = "stable"
+php = "8.3"
+
+[env]
+RUST_BACKTRACE = "1"
+
+[tasks.check]
+description = "Check the Rust workspace"
+run = "cargo check --workspace --all-targets"
+
+[tasks.test]
+description = "Run Rust tests"
+run = "cargo test --workspace"
+
+[tasks.fmt]
+description = "Format Rust code"
+run = "cargo fmt --all"
+
+[tasks.build]
+description = "Build the Rust workspace"
+run = "cargo build --workspace"
+
+[tasks.php-ext-build]
+description = "Build the PHP extension crate when PHP development headers are available"
+run = "cargo build -p mxp_search --features php-extension"
+
+[tasks.php-ext-info]
+description = "Load the debug PHP extension and print module info"
+run = "php -d extension=target/debug/libmxp_search.dylib --ri mxp_search"

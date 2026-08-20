@@ -1,0 +1,7 @@
+services:
+  web:
+    volumes:
+      - mxp-local-search-data:/var/lib/mxp-local-search
+
+volumes:
+  mxp-local-search-data:

@@ -1,0 +1,33 @@
+[workspace]
+members = [
+    "crates/mxp-search-core",
+    "crates/mxp-search-php",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://example.invalid/mxp-local-search"
+rust-version = "1.82"
+
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("embedding-onnx", "vector-usearch"))'] }
+[workspace.dependencies]
+mxp-search-core = { path = "crates/mxp-search-core" }
+anyhow = "1.0"
+base64 = "0.22"
+parking_lot = "0.12"
+rusqlite = { version = "0.32", features = ["bundled", "modern_sqlite", "functions"] }
+serde = { version = "1.0", features = ["derive"] }
+ndarray = "0.17"
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "load-dynamic", "ndarray"] }
+tokenizers = { version = "0.23", default-features = false, features = ["fancy-regex"] }
+usearch = "2.26"
+serde_json = "1.0"
+sha2 = "0.10"
+thiserror = "2.0"
+time = { version = "0.3", features = ["formatting", "macros"] }
+tempfile = "3.12"
+uuid = { version = "1.10", features = ["v4", "serde"] }

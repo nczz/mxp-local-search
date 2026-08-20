@@ -1,0 +1,46 @@
+ARG BASE_IMAGE
+FROM $BASE_IMAGE
+USER root
+ENV CARGO_HOME=/usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV PATH=/usr/local/cargo/bin:$PATH
+RUN export DEBIAN_FRONTEND=noninteractive \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        -o Dpkg::Options::="--force-confold" \
+        -o Dpkg::Options::="--force-confdef" \
+        build-essential \
+        clang \
+        curl \
+        pkg-config \
+        ca-certificates \
+        php${DDEV_PHP_VERSION}-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+ARG ONNXRUNTIME_VERSION=1.17.3
+ARG ONNXRUNTIME_SHA256_AARCH64=9f801577bd99676d1d821022e52b1f4554f56339ae3606c7b5ff3155f443c921
+ARG ONNXRUNTIME_SHA256_X64=f2f11f9da1e3e19b22a8b378b9af57a58433f40e3db6a803e75c0ec0eba97a20
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+      aarch64|arm64) ort_arch="aarch64"; expected_sha="$ONNXRUNTIME_SHA256_AARCH64" ;; \
+      x86_64|amd64) ort_arch="x64"; expected_sha="$ONNXRUNTIME_SHA256_X64" ;; \
+      *) echo "unsupported ONNX Runtime architecture: $arch" >&2; exit 1 ;; \
+    esac; \
+    name="onnxruntime-linux-${ort_arch}-${ONNXRUNTIME_VERSION}"; \
+    curl -fL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/${name}.tgz" -o "/tmp/${name}.tgz"; \
+    actual_sha="$(sha256sum "/tmp/${name}.tgz" | cut -d" " -f1)"; \
+    if [ "$actual_sha" != "$expected_sha" ]; then \
+      echo "ONNX Runtime checksum mismatch: expected $expected_sha, got $actual_sha" >&2; \
+      exit 1; \
+    fi; \
+    tar -xzf "/tmp/${name}.tgz" -C /tmp; \
+    cp /tmp/${name}/lib/libonnxruntime.so* /usr/local/lib/; \
+    chmod 755 /usr/local/lib/libonnxruntime.so*; \
+    echo /usr/local/lib > /etc/ld.so.conf.d/mxp-onnxruntime.conf; \
+    ldconfig; \
+    rm -rf "/tmp/${name}" "/tmp/${name}.tgz"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --profile minimal --default-toolchain stable \
+    && chmod -R a+w "$CARGO_HOME" "$RUSTUP_HOME"
+USER $DDEV_WEBUSER

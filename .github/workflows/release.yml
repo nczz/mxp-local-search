@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing git tag to release, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install DDEV
+        run: curl -fsSL https://ddev.com/install.sh | bash
+
+      - name: Start DDEV
+        run: ddev start -y
+
+      - name: Build, install, smoke, and verify release artifacts
+        env:
+          MXP_RELEASE_GIT_COMMIT: ${{ github.sha }}
+        run: scripts/release-ci.sh
+
+      - name: Upload release dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: mxp-local-search-${{ matrix.arch }}
+          path: release/dist/**
+          if-no-files-found: error
+
+  publish-draft:
+    name: Publish draft release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: collected-release
+
+      - name: Verify collected artifacts and write notes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+
+          root = Path('collected-release')
+          manifests = sorted(root.glob('**/mxp-local-search-*-manifest.json'))
+          if not manifests:
+              raise SystemExit('no release manifests downloaded')
+
+          import shutil
+          assets_dir = Path('release-assets')
+          assets_dir.mkdir(exist_ok=True)
+          copied = {}
+          notes = ['# MXP Local Search release', '', 'Automated draft release. Assets are unsigned unless their manifest says otherwise.', '', '## Assets']
+          for manifest_path in manifests:
+              manifest = json.loads(manifest_path.read_text())
+              release_dir = manifest_path.parent
+              version = manifest['version']
+              arch = manifest['build']['arch']
+              php_api = manifest['build']['php_api']
+              notes.append(f'- `{arch}` PHP API `{php_api}`')
+              for artifact in manifest['artifacts']:
+                  path = release_dir / artifact['file']
+                  if not path.is_file():
+                      raise SystemExit(f'missing artifact: {path}')
+                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  if digest != artifact['sha256']:
+                      raise SystemExit(f'sha256 mismatch: {path}')
+                  target_name = path.name
+                  if artifact['kind'] == 'wordpress_plugin' or artifact['kind'] == 'model_bundle':
+                      previous = copied.get(target_name)
+                      if previous:
+                          if previous != digest:
+                              raise SystemExit(f'duplicate asset filename has different content: {target_name}')
+                          continue
+                  target = assets_dir / target_name
+                  shutil.copy2(path, target)
+                  copied[target_name] = digest
+
+              checksums = release_dir / 'SHA256SUMS'
+              if not checksums.is_file():
+                  raise SystemExit(f'missing SHA256SUMS: {release_dir}')
+              for row in checksums.read_text().splitlines():
+                  if not row.strip():
+                      continue
+                  expected, name = row.split(maxsplit=1)
+                  name = name.strip().lstrip('*')
+                  path = release_dir / name
+                  if not path.is_file():
+                      raise SystemExit(f'SHA256SUMS references missing file: {name}')
+                  actual = hashlib.sha256(path.read_bytes()).hexdigest()
+                  if actual != expected:
+                      raise SystemExit(f'SHA256SUMS mismatch: {path}')
+
+              manifest_target = assets_dir / f'mxp-local-search-{version}-phpapi{php_api}-linux-{arch}-manifest.json'
+              shutil.copy2(manifest_path, manifest_target)
+              copied[manifest_target.name] = hashlib.sha256(manifest_target.read_bytes()).hexdigest()
+              sums_target = assets_dir / f'SHA256SUMS-phpapi{php_api}-linux-{arch}'
+              shutil.copy2(checksums, sums_target)
+              copied[sums_target.name] = hashlib.sha256(sums_target.read_bytes()).hexdigest()
+
+          Path('release-notes.md').write_text('\n'.join(notes) + '\n')
+          print(f'collected_manifests={len(manifests)} assets={len(copied)}')
+          PY
+
+      - name: Publish GitHub draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: MXP Local Search ${{ env.RELEASE_TAG }}
+          body_path: release-notes.md
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: release-assets/*
