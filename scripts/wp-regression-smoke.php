@@ -9,6 +9,21 @@ function mxp_wp_require(bool $condition, string $message): void
     }
 }
 
+function mxp_wp_error_message($value): string
+{
+    if (!is_wp_error($value)) {
+        return '';
+    }
+    $data = $value->get_error_data();
+    return $value->get_error_code() . ': ' . $value->get_error_message() . (null === $data ? '' : ' data=' . wp_json_encode($data));
+}
+
+function mxp_wp_require_not_error($value, string $message): void
+{
+    mxp_wp_require(!is_wp_error($value), $message . (is_wp_error($value) ? ' (' . mxp_wp_error_message($value) . ')' : ''));
+}
+
+
 function mxp_search_rest(string $query, string $mode = 'hybrid', int $limit = 10): array
 {
     $request = new WP_REST_Request('GET', '/mxp-search/v1/search');
@@ -102,10 +117,10 @@ function mxp_run_scheduled_config_reindex(): void
     mxp_wp_require(false !== $timestamp, 'config reindex scheduled');
     $events = _get_cron_array();
     $hook_events = $events[$timestamp]['mxp_search_config_reindex_event'] ?? [];
+    wp_unschedule_hook('mxp_search_config_reindex_event');
     foreach ($hook_events as $event) {
         do_action_ref_array('mxp_search_config_reindex_event', $event['args']);
     }
-    wp_unschedule_hook('mxp_search_config_reindex_event');
 }
 
 function mxp_create_post(string $title, string $content, string $status = 'publish', string $type = 'post', string $password = ''): int
@@ -164,7 +179,7 @@ wp_unschedule_hook('mxp_search_config_reindex_event');
 
 
 mxp_delete_fixture_posts();
-update_option('mxp_local_search_settings', [
+MXP_Local_Search_Plugin::instance()->config->update([
     'kb_mode' => 'single',
     'post_types' => ['post', 'page', 'mxp_smoke_item', 'product'],
     'search_mode' => 'hybrid',
@@ -181,6 +196,7 @@ update_option('mxp_local_search_settings', [
     'default_model' => 'multilingual-e5-small',
     'allowed_models' => ['multilingual-e5-small'],
 ]);
+wp_unschedule_hook('mxp_search_config_reindex_event');
 
 $publicPost = mxp_create_post('MXP Release Smoke Public Post', 'MXP Release Smoke public semantic ONNX hybrid search content with visible snippet and score.', 'publish', 'post');
 $publicPage = mxp_create_post('MXP Release Smoke Public Page', 'MXP Release Smoke page content validates page post type indexing.', 'publish', 'page');
@@ -217,15 +233,20 @@ foreach (['fast', 'semantic', 'hybrid'] as $mode) {
     mxp_wp_require(isset($top['score'], $top['snippet'], $top['permalink']), "{$mode} response fields");
     echo "rest_search_{$mode}_ok count=" . count($results) . ' top="' . $top['title'] . '" score=' . $top['score'] . "\n";
 }
-
 $commentId = wp_insert_comment([
     'comment_post_ID' => $publicPost,
     'comment_content' => 'MXP Release Smoke comment toggle indexed token.',
     'comment_approved' => 1,
+    'comment_author' => 'MXP Smoke',
+    'comment_author_email' => 'mxp-smoke@example.test',
     'user_id' => 1,
 ]);
 mxp_wp_require((int) $commentId > 0, 'approved comment fixture created');
-delete_option(MXP_LOCAL_SEARCH_OPTION);
+clean_comment_cache((int) $commentId);
+clean_post_cache($publicPost);
+wp_update_comment_count_now($publicPost);
+$commentIds = get_comments(['post_id' => $publicPost, 'status' => 'approve', 'fields' => 'ids']);
+mxp_wp_require(in_array((int) $commentId, array_map('intval', $commentIds), true), 'approved comment fixture is queryable');
 MXP_Local_Search_Plugin::instance()->config->update([
     'post_types' => ['post', 'page', 'mxp_smoke_item', 'product'],
     'custom_fields' => ['mxp_release_field'],
@@ -237,8 +258,13 @@ MXP_Local_Search_Plugin::instance()->config->update([
 $timestamp = mxp_next_scheduled_hook('mxp_search_config_reindex_event');
 mxp_wp_require(false !== $timestamp, 'first config update schedules reindex');
 mxp_run_scheduled_config_reindex();
+mxp_clear_write_lock();
+$commentDeleted = MXP_Local_Search_Plugin::instance()->index_manager->delete_post_chunks($publicPost, get_post($publicPost));
+mxp_wp_require_not_error($commentDeleted, 'comment-enabled post cleanup completes');
+$commentIndex = mxp_index_fixture_post($publicPost);
+mxp_wp_require_not_error($commentIndex, 'comment-enabled post reindex completes');
 $commentResults = mxp_search_rest('comment toggle indexed token', 'fast', 5);
-mxp_wp_require(mxp_contains_title($commentResults, 'Public'), 'scheduled config reindex indexes comments');
+mxp_wp_require(mxp_contains_title($commentResults, 'Public'), 'comment-enabled reindex indexes comments');
 MXP_Local_Search_Plugin::instance()->config->update([
     'post_types' => ['post', 'page', 'mxp_smoke_item', 'product'],
     'custom_fields' => ['mxp_release_field'],
