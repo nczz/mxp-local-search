@@ -90,6 +90,23 @@ Local builds are marked `unsigned-local`; checksums are not signatures. Formal r
 
 Use `scripts/release-ci.sh` for the local release gate before version bumps or publishable tags: Rust fmt/tests, release artifact build/verify/install, PHP lint, PHP extension contract smoke, WordPress regression smoke, security probes, and performance baseline. GitHub CI/release jobs use `MXP_RELEASE_CI_SCOPE=artifacts` to build and verify distributable artifacts without running the full DDEV operational smoke suite.
 
+### Ubuntu install paths
+
+There are two supported paths today:
+
+1. **Use GitHub release artifacts** for production-like installs. Pick the `.so` whose filename matches the target host's `php-config --phpapi` and CPU architecture (`x86_64` or `aarch64`). The `.so` is not universal across PHP minor/API versions.
+2. **Build on the target Ubuntu host through DDEV** when no matching artifact exists. This uses the same containerized toolchain as CI, so the resulting artifact records the host PHP API, architecture, glibc family, ONNX Runtime hash, and model hash in its manifest.
+
+For direct installs, install the matching ONNX Runtime shared library and `multilingual-e5-small` model bundle first, then copy the release `.so` into `php-config --extension-dir`, create an `mxp_search.ini`, enable it for CLI/FPM, install the `mxp-local-search` WordPress plugin zip, and verify with:
+
+```bash
+php -r 'var_dump(extension_loaded("mxp_search"));'
+wp plugin activate mxp-local-search
+```
+
+Detailed server commands live in [docs/release.md](docs/release.md#ubuntu-server-install-or-build).
+
+
 Rollback preserves KB/model data by default:
 
 ```bash

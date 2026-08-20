@@ -25,6 +25,89 @@ macOS and non-Linux builds are source/development targets, not redistributable r
 - The PHP extension must be loaded through normal PHP CLI/FPM configuration. Do not claim release readiness from `php -d extension=...` only.
 - `mxp_search.store_root`, `mxp_search.export_root`, and `mxp_search.model_dir` must be outside the WordPress docroot. Model directory must be root-owned/read-only for the web user.
 
+
+## Ubuntu server install or build
+
+### Direct install from a GitHub release
+
+Use this path when the release contains a native extension for the target PHP API and CPU architecture.
+
+1. Inspect the target host:
+
+```bash
+php-config --phpapi
+uname -m
+php -r 'echo PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION, "\n";'
+```
+
+2. Download the matching release directory assets:
+
+- `mxp_search-<version>-phpapi<api>-linux-<x86_64|aarch64>.so`
+- `mxp-local-search-wp-plugin-<version>.zip`
+- `mxp-local-search-<version>-manifest.json`
+- `SHA256SUMS`
+- optional `mxp-local-search-model-multilingual-e5-small-<revision>.tar.gz`
+
+The `.so` is valid only for the manifest's recorded PHP API, CPU architecture, libc-compatible Linux runtime, and ONNX Runtime shared library. Do not reuse a PHP 8.3 artifact on PHP 8.1/8.2/8.4 unless `php-config --phpapi` is identical.
+
+3. Verify checksums:
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
+4. Install runtime directories and the extension:
+
+```bash
+PHP_MM="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+EXT_DIR="$(php-config --extension-dir)"
+
+sudo install -d -m 775 -o www-data -g www-data /var/lib/mxp-local-search/kb /var/lib/mxp-local-search/export
+sudo install -d -m 755 -o root -g root /var/lib/mxp-local-search/models
+sudo install -m 755 -o root -g root mxp_search-<version>-phpapi<api>-linux-<arch>.so "$EXT_DIR/mxp_search.so"
+
+sudo tee "/etc/php/${PHP_MM}/mods-available/mxp_search.ini" >/dev/null <<'INI'
+extension=mxp_search.so
+mxp_search.store_root=/var/lib/mxp-local-search/kb
+mxp_search.export_root=/var/lib/mxp-local-search/export
+mxp_search.model_dir=/var/lib/mxp-local-search/models
+mxp_search.allowed_models=multilingual-e5-small
+mxp_search.max_limit=50
+mxp_search.max_candidate_limit=500
+mxp_search.max_query_bytes=2048
+mxp_search.min_hybrid_score=0.1
+INI
+
+sudo phpenmod mxp_search
+sudo systemctl restart "php${PHP_MM}-fpm" || sudo systemctl restart apache2
+php -r 'echo extension_loaded("mxp_search") ? "mxp_search loaded\n" : "mxp_search missing\n";'
+```
+
+5. Install ONNX Runtime and the model bundle pinned by the manifest. If the release includes the optional model tarball, extract it under `/var/lib/mxp-local-search/models/multilingual-e5-small` as root-owned/read-only. Otherwise download `model.onnx`, `tokenizer.json`, and `manifest.json` from the pinned source and hashes in the manifest before enabling semantic/hybrid search.
+
+6. Install the WordPress plugin:
+
+```bash
+unzip mxp-local-search-wp-plugin-<version>.zip -d /path/to/wordpress/wp-content/plugins/
+wp --path=/path/to/wordpress plugin activate mxp-local-search
+```
+
+### Build on an Ubuntu host
+
+Use this path when there is no matching release artifact. The current supported build path is DDEV, not an undocumented bare-metal Rust/PHP build.
+
+```bash
+git clone https://github.com/nczz/mxp-local-search.git
+cd mxp-local-search
+ddev start -y
+scripts/ddev-install-onnxruntime.sh
+scripts/ddev-install-model-bundle.sh
+scripts/build-release-artifacts.sh
+scripts/verify-release-artifacts.sh
+```
+
+The generated artifact lands under `release/dist/<version>-phpapi<api>-linux-<arch>/`. Install that directory with the direct-install steps above or, in the DDEV environment only, use `scripts/install-release-artifacts.sh`.
+
 ## Build artifacts
 
 Run from the repository root:
