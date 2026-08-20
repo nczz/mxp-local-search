@@ -17,6 +17,20 @@ if ! scripts/verify-model-bundle.sh >/dev/null 2>&1; then
 fi
 scripts/build-release-artifacts.sh
 scripts/verify-release-artifacts.sh
+ddev exec 'set -euo pipefail
+if ! wp --path=wordpress core is-installed >/dev/null 2>&1; then
+  wp --path=wordpress core install \
+    --url=https://mxp-local-search.ddev.site \
+    --title="MXP Local Search Smoke" \
+    --admin_user=admin \
+    --admin_password=admin \
+    --admin_email=admin@example.test \
+    --skip-email >/dev/null
+  echo wordpress_core_installed=1
+else
+  echo wordpress_core_installed=0
+fi
+'
 scripts/install-release-artifacts.sh
 ddev exec 'set -euo pipefail
 for file in wordpress/wp-content/plugins/mxp-local-search/mxp-local-search.php wordpress/wp-content/plugins/mxp-local-search/includes/class-config.php wordpress/wp-content/plugins/mxp-local-search/includes/class-search-handler.php wordpress/wp-content/plugins/mxp-local-search/includes/class-index-manager.php wordpress/wp-content/plugins/mxp-local-search/includes/class-admin.php wordpress/wp-content/plugins/mxp-local-search/includes/class-kb-manager.php wordpress/wp-content/plugins/mxp-local-search/includes/class-cli.php wordpress/wp-content/plugins/mxp-local-search/includes/class-rest-api.php wordpress/wp-content/plugins/mxp-local-search/includes/class-hooks.php wordpress/wp-content/plugins/mxp-local-search/includes/class-chunker.php wordpress/wp-content/plugins/mxp-local-search/includes/class-content-extractor.php wordpress/wp-content/plugins/mxp-local-search/templates/admin-dashboard.php wordpress/wp-content/plugins/mxp-local-search/templates/admin-settings.php wordpress/wp-content/plugins/mxp-local-search/templates/search-results.php scripts/php-semantic-smoke.php scripts/php-extension-contract-smoke.php scripts/wp-regression-smoke.php; do php -l "$file" >/dev/null; done
