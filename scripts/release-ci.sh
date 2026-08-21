@@ -37,6 +37,7 @@ fi
 "$cargo_bin" test --workspace
 "$cargo_bin" test -p mxp-search-core --features embedding-onnx
 "$cargo_bin" test -p mxp-search-core --features vector-usearch
+"$cargo_bin" test -p mxp-search-core --features embedding-onnx,vector-usearch
 scripts/audit-licenses.sh
 
 if [ "$build_env" = "ddev" ]; then
@@ -44,10 +45,16 @@ if [ "$build_env" = "ddev" ]; then
   if ! scripts/verify-model-bundle.sh >/dev/null 2>&1; then
     scripts/ddev-install-model-bundle.sh
   fi
+  if ! scripts/verify-reranker-bundle.sh >/dev/null 2>&1; then
+    scripts/ddev-install-reranker-bundle.sh
+  fi
 else
   scripts/install-onnxruntime.sh
   if ! MXP_RELEASE_BUILD_ENV=host scripts/verify-model-bundle.sh >/dev/null 2>&1; then
     scripts/install-model-bundle.sh
+  fi
+  if ! MXP_RELEASE_BUILD_ENV=host scripts/verify-reranker-bundle.sh >/dev/null 2>&1; then
+    scripts/install-reranker-bundle.sh
   fi
 fi
 

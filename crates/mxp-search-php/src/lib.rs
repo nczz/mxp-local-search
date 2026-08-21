@@ -12,7 +12,8 @@ mod php_extension {
     };
     #[cfg(feature = "embedding-onnx")]
     use mxp_search_core::{
-        model_requires_allowlist, E5PrefixConfig, EmbeddingInputKind, OnnxEmbedder,
+        model_requires_allowlist, reranker_model_requires_allowlist, E5PrefixConfig,
+        EmbeddingInputKind, OnnxEmbedder, OnnxReranker, DEFAULT_RERANKER_MODEL,
     };
     use mxp_search_core::{
         Config, Document, Filter, FilterOp, FilterValue, SearchMode, SearchOptions,
@@ -25,7 +26,7 @@ mod php_extension {
     #[php_const]
     pub const MXP_SEARCH_ONNX: bool = cfg!(feature = "embedding-onnx");
     #[php_const]
-    pub const MXP_SEARCH_RERANKER: bool = false;
+    pub const MXP_SEARCH_RERANKER: bool = cfg!(feature = "embedding-onnx");
 
     #[cfg(not(feature = "embedding-onnx"))]
     const UNSUPPORTED_EMBEDDINGS: &str =
@@ -285,6 +286,34 @@ mod php_extension {
         pub fn close(&self) {}
     }
 
+    #[php_class(name = "MXP\\Search\\Reranker")]
+    pub struct Reranker {
+        #[cfg(feature = "embedding-onnx")]
+        inner: OnnxReranker,
+    }
+
+    #[php_impl]
+    impl Reranker {
+        #[optional(options)]
+        pub fn __construct(
+            model_id_or_path: Option<String>,
+            options: Option<PhpOptions>,
+        ) -> PhpResult<Self> {
+            construct_reranker(model_id_or_path, options.as_ref())
+        }
+
+        pub fn score(&self, query: String, document: String) -> PhpResult<f64> {
+            rerank_score(self, &query, &document)
+        }
+
+        #[rename("scoreBatch")]
+        pub fn score_batch(&self, query: String, documents: Vec<String>) -> PhpResult<Vec<f64>> {
+            rerank_score_batch(self, &query, &documents)
+        }
+
+        pub fn close(&self) {}
+    }
+
     #[derive(Default)]
     struct BatchCounts {
         new: i64,
@@ -395,6 +424,89 @@ mod php_extension {
         _use_case: EmbeddingUse,
     ) -> PhpResult<Vec<Vec<f64>>> {
         Err(php_exception(UNSUPPORTED_EMBEDDINGS))
+    }
+
+    #[cfg(feature = "embedding-onnx")]
+    fn construct_reranker(
+        model_id_or_path: Option<String>,
+        options: Option<&PhpOptions>,
+    ) -> PhpResult<Reranker> {
+        let config = config_from_options("", options)?;
+        let model = model_id_or_path.unwrap_or_else(|| DEFAULT_RERANKER_MODEL.to_string());
+        let (model_dir, require_allowlist) = reranker_model_dir(&model, &config)?;
+        let inner = OnnxReranker::open(
+            model_dir,
+            &config.allowed_reranker_models,
+            require_allowlist,
+        )
+        .map_err(php_core_error)?;
+        Ok(Reranker { inner })
+    }
+
+    #[cfg(not(feature = "embedding-onnx"))]
+    fn construct_reranker(
+        _model_id_or_path: Option<String>,
+        _options: Option<&PhpOptions>,
+    ) -> PhpResult<Reranker> {
+        Err(php_exception(
+            "MXP Local Search reranker support is not enabled in this build",
+        ))
+    }
+
+    #[cfg(feature = "embedding-onnx")]
+    fn rerank_score(reranker: &Reranker, query: &str, document: &str) -> PhpResult<f64> {
+        reranker
+            .inner
+            .score(query, document)
+            .map(f64::from)
+            .map_err(php_core_error)
+    }
+
+    #[cfg(not(feature = "embedding-onnx"))]
+    fn rerank_score(_reranker: &Reranker, _query: &str, _document: &str) -> PhpResult<f64> {
+        Err(php_exception(
+            "MXP Local Search reranker support is not enabled in this build",
+        ))
+    }
+
+    #[cfg(feature = "embedding-onnx")]
+    fn rerank_score_batch(
+        reranker: &Reranker,
+        query: &str,
+        documents: &[String],
+    ) -> PhpResult<Vec<f64>> {
+        reranker
+            .inner
+            .score_batch(query, documents)
+            .map(|scores| scores.into_iter().map(f64::from).collect())
+            .map_err(php_core_error)
+    }
+
+    #[cfg(not(feature = "embedding-onnx"))]
+    fn rerank_score_batch(
+        _reranker: &Reranker,
+        _query: &str,
+        _documents: &[String],
+    ) -> PhpResult<Vec<f64>> {
+        Err(php_exception(
+            "MXP Local Search reranker support is not enabled in this build",
+        ))
+    }
+
+    #[cfg(feature = "embedding-onnx")]
+    fn reranker_model_dir(model_id_or_path: &str, config: &Config) -> PhpResult<(PathBuf, bool)> {
+        let path = PathBuf::from(model_id_or_path);
+        if path.is_absolute() {
+            if !config.allow_local_model_path {
+                return Err(php_exception(
+                    "MXP Local Search local reranker paths require allow_local_model_path",
+                ));
+            }
+            return Ok((fs::canonicalize(&path).map_err(php_io_error)?, false));
+        }
+        let require_allowlist =
+            reranker_model_requires_allowlist(model_id_or_path, config).map_err(php_core_error)?;
+        Ok((config.model_dir.join(model_id_or_path), require_allowlist))
     }
 
     #[cfg(feature = "embedding-onnx")]
@@ -509,6 +621,11 @@ mod php_extension {
         if let Some(allowed_models) = option_string_list(options, "allowed_models")? {
             config.allowed_models = allowed_models;
         }
+        if let Some(allowed_reranker_models) =
+            option_string_list(options, "allowed_reranker_models")?
+        {
+            config.allowed_reranker_models = allowed_reranker_models;
+        }
         if let Some(allow_local_model_path) = option_bool(options, "allow_local_model_path") {
             config.allow_local_model_path = allow_local_model_path;
         }
@@ -520,6 +637,12 @@ mod php_extension {
         }
         if let Some(max_candidate_limit) = option_usize(options, "max_candidate_limit")? {
             config.max_candidate_limit = max_candidate_limit;
+        }
+        if let Some(max_rerank_candidates) = option_usize(options, "max_rerank_candidates")? {
+            config.max_rerank_candidates = max_rerank_candidates;
+        }
+        if let Some(rerank_batch_size) = option_usize(options, "rerank_batch_size")? {
+            config.rerank_batch_size = rerank_batch_size;
         }
         if let Some(max_query_bytes) = option_usize(options, "max_query_bytes")? {
             config.max_query_bytes = max_query_bytes;
@@ -540,6 +663,17 @@ mod php_extension {
         if config.max_candidate_limit < config.max_limit {
             return Err(php_exception(
                 "MXP Local Search max_candidate_limit must be greater than or equal to max_limit",
+            ));
+        }
+        if config.max_rerank_candidates < config.max_limit {
+            return Err(php_exception(
+                "MXP Local Search max_rerank_candidates must be greater than or equal to max_limit",
+            ));
+        }
+        if config.rerank_batch_size == 0 || config.rerank_batch_size > config.max_rerank_candidates
+        {
+            return Err(php_exception(
+                "MXP Local Search rerank_batch_size must be between 1 and max_rerank_candidates",
             ));
         }
         Ok(())
@@ -567,6 +701,14 @@ mod php_extension {
                 .map(ToOwned::to_owned)
                 .collect();
         }
+        if let Some(allowed_reranker_models) = ini_string("mxp_search.allowed_reranker_models") {
+            config.allowed_reranker_models = allowed_reranker_models
+                .split(',')
+                .map(str::trim)
+                .filter(|model| !model.is_empty())
+                .map(ToOwned::to_owned)
+                .collect();
+        }
         if let Some(default_mode) = ini_string("mxp_search.default_mode") {
             config.default_mode = default_mode;
         }
@@ -575,6 +717,12 @@ mod php_extension {
         }
         if let Some(max_candidate_limit) = ini_usize("mxp_search.max_candidate_limit")? {
             config.max_candidate_limit = max_candidate_limit;
+        }
+        if let Some(max_rerank_candidates) = ini_usize("mxp_search.max_rerank_candidates")? {
+            config.max_rerank_candidates = max_rerank_candidates;
+        }
+        if let Some(rerank_batch_size) = ini_usize("mxp_search.rerank_batch_size")? {
+            config.rerank_batch_size = rerank_batch_size;
         }
         if let Some(max_query_bytes) = ini_usize("mxp_search.max_query_bytes")? {
             config.max_query_bytes = max_query_bytes;
@@ -1004,12 +1152,14 @@ mod php_extension {
             ));
         }
         let array = value.array().ok_or_else(|| {
-            php_exception("MXP Local Search allowed_models must be a string or string array")
+            php_exception(format!(
+                "MXP Local Search {key} must be a string or string array"
+            ))
         })?;
         let mut values = Vec::new();
         for (_, item) in array {
             values.push(item.string().ok_or_else(|| {
-                php_exception("MXP Local Search allowed_models item must be a string")
+                php_exception(format!("MXP Local Search {key} item must be a string"))
             })?);
         }
         Ok(Some(values))
@@ -1124,6 +1274,11 @@ mod php_extension {
                     IniEntryPermission::System,
                 ),
                 IniEntryDef::new(
+                    "mxp_search.allowed_reranker_models".into(),
+                    DEFAULT_RERANKER_MODEL.into(),
+                    IniEntryPermission::System,
+                ),
+                IniEntryDef::new(
                     "mxp_search.default_mode".into(),
                     "fast".into(),
                     IniEntryPermission::All,
@@ -1136,6 +1291,16 @@ mod php_extension {
                 IniEntryDef::new(
                     "mxp_search.max_candidate_limit".into(),
                     "500".into(),
+                    IniEntryPermission::All,
+                ),
+                IniEntryDef::new(
+                    "mxp_search.max_rerank_candidates".into(),
+                    "50".into(),
+                    IniEntryPermission::All,
+                ),
+                IniEntryDef::new(
+                    "mxp_search.rerank_batch_size".into(),
+                    "4".into(),
                     IniEntryPermission::All,
                 ),
                 IniEntryDef::new(

@@ -196,6 +196,11 @@ final class MXP_Local_Search_KB_Manager {
             (int) $this->config->get( 'max_auth_limit', 50 ),
             (int) $this->config->get( 'max_public_limit', 20 )
         );
+        $max_rerank_candidates = max(
+            (int) $this->config->get( 'max_rerank_candidates', 50 ),
+            $max_candidate_limit
+        );
+
 
         return array(
             'name'                => 'Default',
@@ -203,6 +208,9 @@ final class MXP_Local_Search_KB_Manager {
             'max_limit'           => $max_candidate_limit,
             'max_candidate_limit' => $max_candidate_limit,
             'max_query_bytes'     => (int) $this->config->get( 'max_query_bytes', 2048 ),
+            'allowed_reranker_models' => (array) $this->config->get( 'allowed_reranker_models', array( 'onnx-community/bge-reranker-v2-m3-ONNX' ) ),
+            'max_rerank_candidates'   => $max_rerank_candidates,
+            'rerank_batch_size'       => (int) $this->config->get( 'rerank_batch_size', 4 ),
         );
     }
 

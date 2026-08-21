@@ -1,10 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+inside_ddev_container() {
+  [ "${IS_DDEV_PROJECT:-}" = "true" ]
+}
+
+container_exec() {
+  if inside_ddev_container; then
+    bash -lc "$1"
+  else
+    ddev exec "$1"
+  fi
+}
+
+container_build_env() {
+  if inside_ddev_container; then
+    echo host
+  else
+    echo ddev
+  fi
+}
+
 release_dir="${1:-}"
 if [ -z "$release_dir" ]; then
-  current_php_api=$(ddev exec 'php-config --phpapi' 2>/dev/null | tr -d '\r')
-  current_arch=$(ddev exec 'uname -m' 2>/dev/null | tr -d '\r')
+  current_php_api=$(container_exec 'php-config --phpapi' 2>/dev/null | tr -d '\r')
+  current_arch=$(container_exec 'uname -m' 2>/dev/null | tr -d '\r')
   case "$current_arch" in aarch64|arm64) current_arch=aarch64 ;; x86_64|amd64) current_arch=x86_64 ;; *) echo "unsupported architecture: $current_arch" >&2; exit 1 ;; esac
   release_dir=$(MXP_CURRENT_PHP_API="$current_php_api" MXP_CURRENT_ARCH="$current_arch" python3 - <<'PY'
 from pathlib import Path
@@ -27,12 +47,25 @@ PY
 )
 fi
 
-scripts/ddev-install-onnxruntime.sh
-if ! scripts/verify-model-bundle.sh >/dev/null 2>&1; then
-  scripts/ddev-install-model-bundle.sh
+if inside_ddev_container; then
+  scripts/install-onnxruntime.sh
+  if ! MXP_RELEASE_BUILD_ENV=host scripts/verify-model-bundle.sh >/dev/null 2>&1; then
+    scripts/install-model-bundle.sh
+  fi
+  if ! MXP_RELEASE_BUILD_ENV=host scripts/verify-reranker-bundle.sh >/dev/null 2>&1; then
+    scripts/install-reranker-bundle.sh
+  fi
+else
+  scripts/ddev-install-onnxruntime.sh
+  if ! scripts/verify-model-bundle.sh >/dev/null 2>&1; then
+    scripts/ddev-install-model-bundle.sh
+  fi
+  if ! scripts/verify-reranker-bundle.sh >/dev/null 2>&1; then
+    scripts/ddev-install-reranker-bundle.sh
+  fi
 fi
 
-scripts/verify-release-artifacts.sh "$release_dir"
+MXP_RELEASE_BUILD_ENV="$(container_build_env)" scripts/verify-release-artifacts.sh "$release_dir"
 eval "$(python3 - "$release_dir" <<'PY'
 from pathlib import Path
 import json, shlex, sys
@@ -44,15 +77,19 @@ print('plugin_zip=' + shlex.quote(by_kind['wordpress_plugin']))
 PY
 )"
 
-if ! ddev exec 'test -f /var/lib/mxp-local-search/models/multilingual-e5-small/manifest.json' >/dev/null 2>&1; then
-  scripts/ddev-install-model-bundle.sh
+container_release_dir="$release_dir"
+if ! inside_ddev_container; then
+  container_release_dir="/var/www/html/${release_dir}"
 fi
 
-ddev exec "set -euo pipefail
+container_exec "test -f /var/lib/mxp-local-search/models/multilingual-e5-small/manifest.json"
+container_exec "test -f /var/lib/mxp-local-search/models/onnx-community/bge-reranker-v2-m3-ONNX/manifest.json"
+
+container_exec "set -euo pipefail
 ext_dir=\$(php-config --extension-dir)
 php_version=\$(php -r 'echo PHP_MAJOR_VERSION.\".\".PHP_MINOR_VERSION;')
 sudo mkdir -p \"\$ext_dir\" /var/lib/mxp-local-search/kb /var/lib/mxp-local-search/export /var/lib/mxp-local-search/models
-sudo cp /var/www/html/${release_dir}/${extension_file} \"\$ext_dir/mxp_search.so\"
+sudo cp ${container_release_dir}/${extension_file} \"\$ext_dir/mxp_search.so\"
 sudo chown root:root \"\$ext_dir/mxp_search.so\"
 sudo chmod 755 \"\$ext_dir/mxp_search.so\"
 sudo chown -R \"\$USER\":www-data /var/lib/mxp-local-search/kb /var/lib/mxp-local-search/export
@@ -68,6 +105,9 @@ mxp_search.max_limit=50
 mxp_search.max_candidate_limit=500
 mxp_search.max_query_bytes=2048
 mxp_search.min_hybrid_score=0.1
+mxp_search.allowed_reranker_models=onnx-community/bge-reranker-v2-m3-ONNX
+mxp_search.max_rerank_candidates=50
+mxp_search.rerank_batch_size=4
 INI
 sudo ln -sf \"/etc/php/\${php_version}/mods-available/mxp_search.ini\" \"/etc/php/\${php_version}/cli/conf.d/99-mxp_search.ini\"
 sudo ln -sf \"/etc/php/\${php_version}/mods-available/mxp_search.ini\" \"/etc/php/\${php_version}/fpm/conf.d/99-mxp_search.ini\"
@@ -87,6 +127,7 @@ with zipfile.ZipFile(zip_path) as zf:
     zf.extractall(target)
 PY
 
-ddev exec 'wp --path=wordpress plugin activate mxp-local-search >/dev/null && wp --path=wordpress plugin is-active mxp-local-search && echo plugin_active=1'
-scripts/verify-model-bundle.sh
+container_exec 'wp --path=wordpress plugin activate mxp-local-search >/dev/null && wp --path=wordpress plugin is-active mxp-local-search && echo plugin_active=1'
+MXP_RELEASE_BUILD_ENV="$(container_build_env)" scripts/verify-model-bundle.sh
+MXP_RELEASE_BUILD_ENV="$(container_build_env)" scripts/verify-reranker-bundle.sh
 echo "release_install_ok release_dir=${release_dir}"

@@ -136,10 +136,13 @@ final class MXP_Local_Search_Config {
             'max_auth_limit'        => 50,
             'max_candidate_limit'   => 500,
             'max_query_bytes'       => 2048,
+            'max_rerank_candidates' => 50,
+            'rerank_batch_size'     => 4,
             'batch_size'            => 50,
             'stale_delete_ceiling'  => 1000,
             'default_model'         => 'multilingual-e5-small',
             'allowed_models'        => array( 'multilingual-e5-small' ),
+            'allowed_reranker_models' => array( 'onnx-community/bge-reranker-v2-m3-ONNX' ),
             'store_root'            => '',
             'export_root'           => '',
         );
@@ -174,6 +177,11 @@ final class MXP_Local_Search_Config {
         if ( empty( $models ) ) {
             $models = array( 'multilingual-e5-small' );
         }
+        $reranker_models = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', (array) $settings['allowed_reranker_models'] ) ) ) );
+        if ( empty( $reranker_models ) ) {
+            $reranker_models = array( 'onnx-community/bge-reranker-v2-m3-ONNX' );
+        }
+
 
         return array(
             'kb_mode'               => $kb_mode,
@@ -188,10 +196,13 @@ final class MXP_Local_Search_Config {
             'max_auth_limit'        => max( 1, min( 100, absint( $settings['max_auth_limit'] ) ) ),
             'max_candidate_limit'   => max( 10, min( 5000, absint( $settings['max_candidate_limit'] ) ) ),
             'max_query_bytes'       => max( 1, min( 8192, absint( $settings['max_query_bytes'] ) ) ),
+            'max_rerank_candidates' => max( 1, min( 5000, absint( $settings['max_rerank_candidates'] ) ) ),
+            'rerank_batch_size'     => max( 1, min( 256, absint( $settings['rerank_batch_size'] ) ) ),
             'batch_size'            => max( 1, min( 500, absint( $settings['batch_size'] ) ) ),
             'stale_delete_ceiling'  => max( 1, min( 10000, absint( $settings['stale_delete_ceiling'] ) ) ),
             'default_model'         => sanitize_text_field( (string) $settings['default_model'] ),
             'allowed_models'        => $models,
+            'allowed_reranker_models' => $reranker_models,
             'store_root'            => sanitize_text_field( (string) $settings['store_root'] ),
             'export_root'           => sanitize_text_field( (string) $settings['export_root'] ),
         );

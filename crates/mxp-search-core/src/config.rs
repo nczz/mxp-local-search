@@ -8,14 +8,16 @@ pub struct Config {
     pub export_root: PathBuf,
     pub model_dir: PathBuf,
     pub allowed_models: Vec<String>,
+    pub allowed_reranker_models: Vec<String>,
     pub allow_local_model_path: bool,
     pub default_mode: String,
     pub max_limit: usize,
     pub max_candidate_limit: usize,
+    pub max_rerank_candidates: usize,
+    pub rerank_batch_size: usize,
     pub max_query_bytes: usize,
     pub min_hybrid_score: f32,
 }
-
 impl Config {
     pub fn new(store_root: impl Into<PathBuf>) -> Self {
         let store_root = store_root.into();
@@ -24,10 +26,13 @@ impl Config {
             model_dir: store_root.join("models"),
             store_root,
             allowed_models: vec!["multilingual-e5-small".to_string()],
+            allowed_reranker_models: vec!["onnx-community/bge-reranker-v2-m3-ONNX".to_string()],
             allow_local_model_path: false,
             default_mode: "fast".to_string(),
             max_limit: 50,
             max_candidate_limit: 500,
+            max_rerank_candidates: 50,
+            rerank_batch_size: 4,
             max_query_bytes: 2048,
             min_hybrid_score: 0.1,
         }

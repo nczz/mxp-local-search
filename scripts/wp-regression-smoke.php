@@ -29,7 +29,7 @@ function mxp_search_rest(string $query, string $mode = 'hybrid', int $limit = 10
     $request = new WP_REST_Request('GET', '/mxp-search/v1/search');
     $request->set_query_params(['q' => $query, 'mode' => $mode, 'limit' => $limit]);
     $response = rest_do_request($request);
-    mxp_wp_require($response->get_status() === 200, "REST search {$mode} status {$response->get_status()}");
+    mxp_wp_require($response->get_status() === 200, "REST search {$mode} status {$response->get_status()} data=" . wp_json_encode($response->get_data()));
     $data = $response->get_data();
     return is_array($data['results'] ?? null) ? $data['results'] : [];
 }
@@ -63,6 +63,20 @@ function mxp_index_fixture_post(int $post_id): array|WP_Error
     for ($attempt = 0; $attempt < 5; ++$attempt) {
         mxp_clear_write_lock();
         $result = MXP_Local_Search_Plugin::instance()->index_manager->index_post($post_id, true);
+        if (!is_wp_error($result) || 'mxp_search_write_locked' !== $result->get_error_code()) {
+            return $result;
+        }
+        usleep(200000);
+    }
+    return $result;
+}
+
+function mxp_delete_fixture_chunks(int $post_id): int|WP_Error
+{
+    $result = null;
+    for ($attempt = 0; $attempt < 5; ++$attempt) {
+        mxp_clear_write_lock();
+        $result = MXP_Local_Search_Plugin::instance()->index_manager->delete_post_chunks($post_id, get_post($post_id) ?: null);
         if (!is_wp_error($result) || 'mxp_search_write_locked' !== $result->get_error_code()) {
             return $result;
         }
@@ -152,6 +166,15 @@ function mxp_delete_fixture_posts(): void
 
 mxp_wp_require(function_exists('is_plugin_active'), 'WordPress admin plugin API loaded');
 mxp_wp_require(is_plugin_active('mxp-local-search/mxp-local-search.php'), 'mxp-local-search plugin active');
+if (!post_type_exists('mxp_smoke_item')) {
+    register_post_type('mxp_smoke_item', [
+        'label' => 'MXP Smoke Items',
+        'public' => true,
+        'show_in_rest' => true,
+        'supports' => ['title', 'editor', 'excerpt', 'custom-fields'],
+    ]);
+}
+
 mxp_wp_require(extension_loaded('mxp_search'), 'mxp_search extension loaded in WordPress PHP');
 mxp_wp_require(post_type_exists('mxp_smoke_item'), 'smoke custom post type registered');
 if (!post_type_exists('product')) {
@@ -259,7 +282,7 @@ $timestamp = mxp_next_scheduled_hook('mxp_search_config_reindex_event');
 mxp_wp_require(false !== $timestamp, 'first config update schedules reindex');
 mxp_run_scheduled_config_reindex();
 mxp_clear_write_lock();
-$commentDeleted = MXP_Local_Search_Plugin::instance()->index_manager->delete_post_chunks($publicPost, get_post($publicPost));
+$commentDeleted = mxp_delete_fixture_chunks($publicPost);
 mxp_wp_require_not_error($commentDeleted, 'comment-enabled post cleanup completes');
 $commentIndex = mxp_index_fixture_post($publicPost);
 mxp_wp_require_not_error($commentIndex, 'comment-enabled post reindex completes');

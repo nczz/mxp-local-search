@@ -198,6 +198,6 @@ This local gate runs Rust formatting, Rust tests, artifact build/verify/install,
 
 ## Current limitations
 
-- `deep`/reranker mode is intentionally unsupported and must fail closed. Do not expose it as a stable feature until the reranker model, API contract, tests, and CPU/latency guardrails exist.
+- `deep`/reranker mode is available only when `MXP_SEARCH_RERANKER` is true and the pinned reranker bundle verifies. Public anonymous WordPress search still forbids caller-requested `deep`; admin/server contexts may use it with bounded rerank candidates and batch size.
 - HNSW/usearch is a feature-gated acceleration path. Do not claim production ANN performance until a larger benchmark proves recall/latency and rebuild recovery.
 - Published stable artifacts still need a signing/attestation implementation. `unsigned-local` artifacts are acceptable for internal/pre-release validation only.

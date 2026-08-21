@@ -3,6 +3,7 @@ mod embedding;
 mod error;
 mod hybrid;
 mod path;
+mod reranker;
 mod search;
 mod store;
 mod vector;
@@ -20,9 +21,16 @@ pub use hybrid::{
     clamp_score, confidence_gate, passes_confidence_gate, weighted_score_fusion, ConfidenceGate,
     ScoreWeights,
 };
+#[cfg(feature = "embedding-onnx")]
+pub use reranker::OnnxReranker;
+pub use reranker::{
+    default_reranker_manifest, rerank_hits_with_scores, reranker_candidate_limit,
+    RerankerFileManifest, RerankerManifest, DEFAULT_RERANKER_MODEL,
+};
 pub use search::{Filter, FilterOp, FilterValue, SearchMode, SearchOptions, SearchResult};
 pub use store::{
-    model_requires_allowlist, Document, DocumentChunk, Store, StoreEmbeddingConfig, StoreStats,
-    UpdateOutcome, VectorGenerationState, KB_MARKER, SCHEMA_VERSION,
+    model_requires_allowlist, reranker_model_requires_allowlist, Document, DocumentChunk, Store,
+    StoreEmbeddingConfig, StoreStats, UpdateOutcome, VectorGenerationState, KB_MARKER,
+    SCHEMA_VERSION,
 };
 pub use vector::{l2_normalize, validate_query_vector, VectorSearchOptions};

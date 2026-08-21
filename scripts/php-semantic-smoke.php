@@ -63,20 +63,14 @@ $outcome = $store->update('doc-alpha', 'Updated vector target', 'Chocolate ganac
 require_true($outcome === 'full', 'content-changing update should fully reindex');
 $dessert = $store->search('chocolate banana dessert', ['mode' => 'semantic', 'limit' => 1]);
 require_true(count($dessert) === 1 && $dessert[0]['doc_id'] === 'doc-alpha', 'updated semantic content should be searchable');
+$deep = $store->search('chocolate banana dessert', ['mode' => 'deep', 'limit' => 1]);
+require_true(count($deep) === 1 && $deep[0]['doc_id'] === 'doc-alpha', 'deep search should rerank updated semantic content');
+echo "deep_search_ok top={$deep[0]['doc_id']} score={$deep[0]['score']}\n";
 require_true($store->delete('doc-alpha') === true, 'delete should report existing document deletion');
 $afterDelete = $store->stats();
 require_true((int) $afterDelete['document_count'] === 1, 'delete should remove document');
 require_true((int) $afterDelete['vector_count'] === 1, 'delete should remove vector');
 echo "update_delete_ok documents={$afterDelete['document_count']} vectors={$afterDelete['vector_count']}\n";
-
-try {
-    $store->search('must fail', ['mode' => 'deep']);
-    fwrite(STDERR, "FAIL: unsupported deep mode should throw\n");
-    exit(1);
-} catch (MXP\Search\Exception $e) {
-    require_true($e->getMessage() !== '', 'exception message should be non-empty');
-    echo "exception_mapping_ok " . get_class($e) . "\n";
-}
 
 $sourceModel = (ini_get('mxp_search.model_dir') ?: '/var/lib/mxp-local-search/models') . '/multilingual-e5-small';
 $tempModelRoot = sys_get_temp_dir() . '/mxp-smoke-relative-models';

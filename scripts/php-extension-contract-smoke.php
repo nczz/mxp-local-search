@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use MXP\Search\Embedder;
+use MXP\Search\Reranker;
 use MXP\Search\Store;
 
 function mxp_require(bool $condition, string $message): void
@@ -16,9 +17,10 @@ function mxp_require(bool $condition, string $message): void
 mxp_require(extension_loaded('mxp_search'), 'mxp_search extension must be loaded through normal PHP config');
 mxp_require(defined('MXP_SEARCH_VERSION'), 'MXP_SEARCH_VERSION constant');
 mxp_require(defined('MXP_SEARCH_ONNX') && MXP_SEARCH_ONNX === true, 'MXP_SEARCH_ONNX true');
-mxp_require(defined('MXP_SEARCH_RERANKER') && MXP_SEARCH_RERANKER === false, 'MXP_SEARCH_RERANKER false until implemented');
+mxp_require(defined('MXP_SEARCH_RERANKER') && MXP_SEARCH_RERANKER === true, 'MXP_SEARCH_RERANKER true');
 mxp_require(class_exists(Store::class), 'Store class exists');
 mxp_require(class_exists(Embedder::class), 'Embedder class exists');
+mxp_require(class_exists(Reranker::class), 'Reranker class exists');
 mxp_require(class_exists('MXP\\Search\\Exception'), 'Exception class exists');
 echo "constants_ok version=" . MXP_SEARCH_VERSION . " onnx=" . (MXP_SEARCH_ONNX ? '1' : '0') . " reranker=" . (MXP_SEARCH_RERANKER ? '1' : '0') . "\n";
 
@@ -47,7 +49,7 @@ $listed = Store::list($root);
 mxp_require(count($listed) >= 1, 'Store::list returns stores');
 echo "store_contract_ok documents={$stats['document_count']} vectors={$stats['vector_count']}\n";
 
-foreach (['fast', 'semantic', 'hybrid'] as $mode) {
+foreach (['fast', 'semantic', 'hybrid', 'deep'] as $mode) {
     $hits = $store->search('PHP extension', ['mode' => $mode, 'limit' => 2]);
     mxp_require(count($hits) >= 1, "{$mode} search returns hits");
     mxp_require($hits[0]['doc_id'] === 'contract-alpha', "{$mode} ranks alpha first");
@@ -73,9 +75,17 @@ $batchVectors = $embedder->embedBatch(['first release document', 'second release
 mxp_require(count($query) === 384 && count($doc) === 384, 'single embeddings dimension');
 mxp_require(count($batchVectors) === 2 && count($batchVectors[0]) === 384 && count($batchVectors[1]) === 384, 'batch embeddings dimension');
 echo "embedder_contract_ok query_dims=" . count($query) . " batch=" . count($batchVectors) . "\n";
+$reranker = new Reranker('onnx-community/bge-reranker-v2-m3-ONNX');
+$good = $reranker->score('release verification query', 'release verification document');
+$bad = $reranker->score('release verification query', 'banana recipe');
+mxp_require(is_float($good) && is_float($bad) && $good >= 0.0 && $good <= 1.0 && $bad >= 0.0 && $bad <= 1.0, 'Reranker scores are normalized');
+$batchScores = $reranker->scoreBatch('release verification query', ['release verification document', 'banana recipe']);
+mxp_require(count($batchScores) === 2 && is_float($batchScores[0]) && is_float($batchScores[1]), 'Reranker scoreBatch returns scores');
+echo "reranker_contract_ok good={$good} bad={$bad}\n";
+
 
 $negativeCases = 0;
-try { $store->search('deep should fail', ['mode' => 'deep']); } catch (MXP\Search\Exception $e) { ++$negativeCases; echo "deep_fail_closed_ok\n"; }
+try { new Reranker('not-allowlisted-reranker'); } catch (MXP\Search\Exception $e) { ++$negativeCases; echo "unsupported_reranker_rejected\n"; }
 try { new Embedder('not-allowlisted-model'); } catch (MXP\Search\Exception $e) { ++$negativeCases; echo "unsupported_model_rejected\n"; }
 try { new Embedder('multilingual-e5-small', ['dimensions' => 13]); } catch (MXP\Search\Exception $e) { ++$negativeCases; echo "dimension_mismatch_rejected\n"; }
 try { new Embedder('multilingual-e5-small', ['query_prefix' => 'bad: ']); } catch (MXP\Search\Exception $e) { ++$negativeCases; echo "prefix_mismatch_rejected\n"; }

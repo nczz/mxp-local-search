@@ -111,6 +111,7 @@ pub fn unsupported_semantic_backend() -> Error {
     }
 }
 
+#[cfg(not(feature = "embedding-onnx"))]
 pub fn unsupported_hybrid_backend() -> Error {
     Error::UnsupportedFeature {
         feature: "hybrid search",
@@ -123,6 +124,7 @@ fn semantic_backend_reason() -> &'static str {
     "embedding-onnx feature is disabled"
 }
 
+#[cfg(not(feature = "embedding-onnx"))]
 fn hybrid_backend_reason() -> &'static str {
     if cfg!(feature = "embedding-onnx") {
         "embedding-onnx feature is enabled but ONNX embedding runtime is unavailable"

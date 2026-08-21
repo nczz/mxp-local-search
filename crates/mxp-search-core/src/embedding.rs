@@ -402,7 +402,7 @@ fn mean_pool(
 }
 
 #[cfg(feature = "embedding-onnx")]
-fn init_ort_runtime() -> Result<()> {
+pub(crate) fn init_ort_runtime() -> Result<()> {
     static INIT: OnceLock<std::result::Result<(), String>> = OnceLock::new();
     INIT.get_or_init(|| {
         if let Ok(path) = std::env::var("MXP_SEARCH_ONNX_RUNTIME") {
@@ -421,7 +421,7 @@ fn init_ort_runtime() -> Result<()> {
 }
 
 #[cfg(feature = "embedding-onnx")]
-fn onnx_error(error: ort::Error) -> Error {
+pub(crate) fn onnx_error(error: ort::Error) -> Error {
     Error::InvalidOption(format!("ONNX Runtime error: {error}"))
 }
 
@@ -521,7 +521,7 @@ pub fn canonical_model_cache_key(
     ))
 }
 
-fn validate_cache_segment(label: &str, value: &str) -> Result<()> {
+pub(crate) fn validate_cache_segment(label: &str, value: &str) -> Result<()> {
     if value.is_empty() || value == "." || value == ".." || value.starts_with('.') {
         return Err(Error::InvalidOption(format!("invalid {label}: {value}")));
     }
@@ -534,7 +534,7 @@ fn validate_cache_segment(label: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate_relative_model_file(path: &Path) -> Result<()> {
+pub(crate) fn validate_relative_model_file(path: &Path) -> Result<()> {
     if path.is_absolute() {
         return Err(Error::InvalidOption(format!(
             "model manifest file must be relative: {}",
@@ -563,7 +563,7 @@ fn validate_relative_model_file(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn validate_sha256_hex(value: &str) -> Result<()> {
+pub(crate) fn validate_sha256_hex(value: &str) -> Result<()> {
     if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(Error::InvalidOption(format!(
             "invalid SHA-256 checksum: {value}"

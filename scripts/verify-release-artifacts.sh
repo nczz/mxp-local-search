@@ -103,6 +103,28 @@ for name, (expected_hash, expected_size) in expected_model_files.items():
         raise SystemExit(f'manifest missing model file pin: {name}')
     if item.get('sha256') != expected_hash or int(item.get('size_bytes') or 0) != expected_size:
         raise SystemExit(f'manifest model file pin mismatch: {name}')
+expected_reranker_id = os.environ.get('MXP_SEARCH_RERANKER_ID', 'onnx-community/bge-reranker-v2-m3-ONNX')
+expected_reranker_revision = os.environ.get('MXP_SEARCH_RERANKER_REVISION', '6f5ff65298512715a1e669753bc754d2bc8f367b')
+expected_reranker_files = {
+    'model.onnx': (
+        os.environ.get('MXP_SEARCH_RERANKER_MODEL_SHA256', '912fc1215c2dbff6499700534bd8d31253af01573861abbfc43afd1fab6cce5d'),
+        int(os.environ.get('MXP_SEARCH_RERANKER_MODEL_SIZE', '570727094')),
+    ),
+    'tokenizer.json': (
+        os.environ.get('MXP_SEARCH_RERANKER_TOKENIZER_SHA256', '8bf8afbfd11306bd872018c53bfdf2e160a56f8edbcf49933324404791c148d3'),
+        int(os.environ.get('MXP_SEARCH_RERANKER_TOKENIZER_SIZE', '17082900')),
+    ),
+}
+reranker = runtime.get('reranker') or {}
+if reranker.get('id') != expected_reranker_id or reranker.get('revision') != expected_reranker_revision:
+    raise SystemExit('manifest reranker id/revision mismatch')
+reranker_files = {item.get('path'): item for item in reranker.get('files') or []}
+for name, (expected_hash, expected_size) in expected_reranker_files.items():
+    item = reranker_files.get(name)
+    if not item:
+        raise SystemExit(f'manifest missing reranker file pin: {name}')
+    if item.get('sha256') != expected_hash or int(item.get('size_bytes') or 0) != expected_size:
+        raise SystemExit(f'manifest reranker file pin mismatch: {name}')
 for artifact in manifest['artifacts']:
     path = release_dir / artifact['file']
     if not path.is_file():
@@ -175,5 +197,6 @@ if [ -n "$current_ort_lib_sha" ]; then
   echo "onnxruntime_shared_library=1 sha256=$current_ort_lib_sha"
 fi
 MXP_RELEASE_BUILD_ENV="$build_env" scripts/verify-model-bundle.sh
+MXP_RELEASE_BUILD_ENV="$build_env" scripts/verify-reranker-bundle.sh
 
 echo "release_artifacts_verify_ok"

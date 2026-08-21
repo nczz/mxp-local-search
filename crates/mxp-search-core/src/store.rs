@@ -16,10 +16,12 @@ use crate::hybrid::{passes_confidence_gate, weighted_score_fusion, ConfidenceGat
 use crate::path::{atomic_write, resolve_existing_kb_path, resolve_new_kb_path};
 use crate::search::{build_filter_sql, safe_fts_query, SearchMode, SearchOptions, SearchResult};
 #[cfg(not(feature = "embedding-onnx"))]
+use crate::vector::unsupported_hybrid_backend;
+#[cfg(not(feature = "embedding-onnx"))]
 use crate::vector::unsupported_semantic_backend;
 use crate::vector::{
-    cosine_similarity, decode_f32_vector, encode_f32_vector, unsupported_hybrid_backend,
-    validate_query_vector, VectorSearchOptions,
+    cosine_similarity, decode_f32_vector, encode_f32_vector, validate_query_vector,
+    VectorSearchOptions,
 };
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -343,7 +345,7 @@ impl Store {
             SearchMode::Fast => {}
             SearchMode::Semantic => return self.semantic_search(query, options, config),
             SearchMode::Hybrid => return self.hybrid_search(query, options, config),
-            SearchMode::Deep => return Err(unsupported_hybrid_backend()),
+            SearchMode::Deep => return self.deep_search(query, options, config),
         }
         let Some(fts_query) = safe_fts_query(query, config.max_query_bytes)? else {
             return Ok(Vec::new());
@@ -450,6 +452,15 @@ impl Store {
         hybrid_search_impl(self, query, options, config)
     }
 
+    pub fn deep_search(
+        &self,
+        query: &str,
+        options: &SearchOptions,
+        config: &Config,
+    ) -> Result<Vec<SearchResult>> {
+        deep_search_impl(self, query, options, config)
+    }
+
     fn search_vectors(
         &self,
         query_vector: &[f32],
@@ -505,6 +516,51 @@ impl Store {
         });
         hits.truncate(limit);
         Ok(hits)
+    }
+
+    #[cfg(feature = "embedding-onnx")]
+    fn chunk_documents_for_hits(&self, hits: &[SearchResult]) -> Result<Vec<String>> {
+        if hits.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = std::iter::repeat_n("?", hits.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id, title, content FROM chunks WHERE id IN ({})",
+            placeholders
+        );
+        let ids = hits
+            .iter()
+            .map(|hit| rusqlite::types::Value::Text(hit.chunk_id.clone()))
+            .collect::<Vec<_>>();
+        let db = self.connection()?;
+        let mut stmt = db.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(ids.iter()), |row| {
+            let chunk_id: String = row.get(0)?;
+            let title: String = row.get(1)?;
+            let content: String = row.get(2)?;
+            Ok((chunk_id, title, content))
+        })?;
+        let mut by_id = std::collections::HashMap::with_capacity(hits.len());
+        for row in rows {
+            let (chunk_id, title, content) = row?;
+            let mut text = String::with_capacity(title.len() + content.len() + 2);
+            text.push_str(&title);
+            text.push_str("\n\n");
+            text.push_str(&content);
+            by_id.insert(chunk_id, text);
+        }
+        hits.iter()
+            .map(|hit| {
+                by_id.remove(&hit.chunk_id).ok_or_else(|| {
+                    Error::InvalidOption(format!(
+                        "missing chunk content for reranker candidate: {}",
+                        hit.chunk_id
+                    ))
+                })
+            })
+            .collect()
     }
 
     fn write_document(
@@ -761,6 +817,63 @@ fn hybrid_search_impl(
     Ok(hits)
 }
 
+#[cfg(feature = "embedding-onnx")]
+fn deep_search_impl(
+    store: &Store,
+    query: &str,
+    options: &SearchOptions,
+    config: &Config,
+) -> Result<Vec<SearchResult>> {
+    use crate::reranker::{rerank_hits_with_scores, reranker_candidate_limit, OnnxReranker};
+
+    if safe_fts_query(query, config.max_query_bytes)?.is_none() {
+        return Ok(Vec::new());
+    }
+    let max_limit = config.max_limit.max(1);
+    let limit = options.limit.clamp(1, max_limit);
+    let candidate_limit = reranker_candidate_limit(
+        limit,
+        options.candidate_limit,
+        config
+            .max_rerank_candidates
+            .min(config.max_candidate_limit)
+            .max(limit),
+    );
+    let mut candidate_options = options.clone();
+    candidate_options.mode = SearchMode::Hybrid;
+    candidate_options.limit = candidate_limit;
+    candidate_options.candidate_limit = Some(candidate_limit);
+    candidate_options.min_score = 0.0;
+    let candidates = hybrid_search_impl(store, query, &candidate_options, config)?;
+    let candidate_texts = store.chunk_documents_for_hits(&candidates)?;
+    let require_allowlist =
+        reranker_model_requires_allowlist(crate::reranker::DEFAULT_RERANKER_MODEL, config)?;
+    let model_dir = config
+        .model_dir
+        .join(crate::reranker::DEFAULT_RERANKER_MODEL);
+    let reranker = OnnxReranker::open(
+        model_dir,
+        &config.allowed_reranker_models,
+        require_allowlist,
+    )?;
+    let mut scores = Vec::with_capacity(candidate_texts.len());
+    let batch_size = config.rerank_batch_size.max(1);
+    for batch in candidate_texts.chunks(batch_size) {
+        scores.extend(reranker.score_batch(query, batch)?);
+    }
+    rerank_hits_with_scores(candidates, &scores, limit, options.min_score)
+}
+
+#[cfg(not(feature = "embedding-onnx"))]
+fn deep_search_impl(
+    _store: &Store,
+    _query: &str,
+    _options: &SearchOptions,
+    _config: &Config,
+) -> Result<Vec<SearchResult>> {
+    Err(unsupported_hybrid_backend())
+}
+
 #[cfg(not(feature = "embedding-onnx"))]
 fn hybrid_search_impl(
     _store: &Store,
@@ -878,6 +991,21 @@ pub fn model_requires_allowlist(model: &str, config: &Config) -> Result<bool> {
         return Ok(false);
     }
     validate_allowlisted_model_id(model, &config.allowed_models)?;
+    Ok(true)
+}
+
+pub fn reranker_model_requires_allowlist(model: &str, config: &Config) -> Result<bool> {
+    if config.allow_local_model_path
+        && (model.contains('/') || model.contains('\\'))
+        && !config
+            .allowed_reranker_models
+            .iter()
+            .any(|allowed| allowed == model)
+    {
+        validate_local_model_path(model)?;
+        return Ok(false);
+    }
+    validate_allowlisted_model_id(model, &config.allowed_reranker_models)?;
     Ok(true)
 }
 
