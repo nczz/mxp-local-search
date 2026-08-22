@@ -1,4 +1,8 @@
 <?php
+if (!defined('DISABLE_WP_CRON')) {
+    define('DISABLE_WP_CRON', true);
+}
+
 
 
 function mxp_wp_require(bool $condition, string $message): void
@@ -56,6 +60,10 @@ function mxp_clear_write_lock(): void
     delete_option('_transient_mxp_search_write_lock');
     delete_option('_transient_timeout_mxp_search_write_lock');
 }
+mxp_clear_write_lock();
+wp_clear_scheduled_hook('mxp_search_index_all_event');
+wp_clear_scheduled_hook('mxp_search_config_reindex_event');
+
 
 function mxp_index_fixture_post(int $post_id): array|WP_Error
 {
@@ -241,8 +249,8 @@ $indexRequest->set_body_params(['post_type' => '', 'batch' => 25]);
 $indexResponse = rest_do_request($indexRequest);
 mxp_wp_require($indexResponse->get_status() === 200, 'REST index-all scheduling succeeds');
 $indexData = $indexResponse->get_data();
-do_action('mxp_search_index_all_event', ['post_type' => '', 'batch' => 25]);
 wp_unschedule_hook('mxp_search_index_all_event');
+do_action('mxp_search_index_all_event', ['post_type' => '', 'batch' => 25]);
 echo 'rest_index_all_status=200 scheduled=' . ( ! empty($indexData['scheduled']) ? '1' : '0' ) . "\n";
 
 foreach (['fast', 'semantic', 'hybrid'] as $mode) {

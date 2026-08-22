@@ -113,6 +113,81 @@ $chunk_strategy_descriptions = array(
                         <?php if ( ! empty( $operation_status['completed_at'] ) ) : ?>
                             <br /><?php echo esc_html( sprintf( __( 'Completed at %s', 'mxp-local-search' ), wp_date( 'Y-m-d H:i:s', (int) $operation_status['completed_at'] ) ) ); ?>
                         <?php endif; ?>
+                        <?php if ( ! empty( $operation_status['deleted_details'] ) && is_array( $operation_status['deleted_details'] ) ) : ?>
+                            <div class="mxp-status-details">
+                                <strong><?php esc_html_e( 'Deleted items', 'mxp-local-search' ); ?></strong>
+                                <ul>
+                                    <?php foreach ( $operation_status['deleted_details'] as $deleted_detail ) : ?>
+                                        <?php
+                                        $deleted_detail = is_array( $deleted_detail ) ? $deleted_detail : array();
+                                        $post_id        = (int) ( $deleted_detail['post_id'] ?? 0 );
+                                        $title          = (string) ( $deleted_detail['title'] ?? '' );
+                                        $label          = '' !== $title ? $title : sprintf( __( 'Post #%d', 'mxp-local-search' ), $post_id );
+                                        $edit_link      = $post_id > 0 ? get_edit_post_link( $post_id ) : '';
+                                        $meta           = array_filter(
+                                            array(
+                                                (string) ( $deleted_detail['post_type'] ?? '' ),
+                                                (string) ( $deleted_detail['status'] ?? '' ),
+                                                (string) ( $deleted_detail['reason'] ?? '' ),
+                                            )
+                                        );
+                                        ?>
+                                        <li>
+                                            <?php if ( $edit_link ) : ?>
+                                                <a href="<?php echo esc_url( $edit_link ); ?>"><?php echo esc_html( $label ); ?></a>
+                                            <?php else : ?>
+                                                <?php echo esc_html( $label ); ?>
+                                            <?php endif; ?>
+                                            <?php if ( ! empty( $meta ) ) : ?>
+                                                <span class="description"><?php echo esc_html( implode( ' / ', $meta ) ); ?></span>
+                                            <?php endif; ?>
+                                            <?php if ( isset( $deleted_detail['chunks_deleted'] ) ) : ?>
+                                                <span class="description"><?php echo esc_html( sprintf( __( 'Chunks removed: %d', 'mxp-local-search' ), (int) $deleted_detail['chunks_deleted'] ) ); ?></span>
+                                            <?php endif; ?>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
+                        <?php elseif ( (int) ( $operation_status['deleted'] ?? 0 ) > 0 ) : ?>
+                            <br /><span class="description"><?php esc_html_e( 'This operation was recorded before deleted-item details were available.', 'mxp-local-search' ); ?></span>
+                        <?php endif; ?>
+                        <?php if ( ! empty( $operation_status['error_details'] ) && is_array( $operation_status['error_details'] ) ) : ?>
+                            <div class="mxp-status-details">
+                                <strong><?php esc_html_e( 'Errors', 'mxp-local-search' ); ?></strong>
+                                <ol>
+                                    <?php foreach ( $operation_status['error_details'] as $error_detail ) : ?>
+                                        <?php
+                                        $error_detail = is_array( $error_detail ) ? $error_detail : array();
+                                        $post_id      = (int) ( $error_detail['post_id'] ?? 0 );
+                                        $title        = (string) ( $error_detail['title'] ?? '' );
+                                        $label        = $post_id > 0 ? ( '' !== $title ? $title : sprintf( __( 'Post #%d', 'mxp-local-search' ), $post_id ) ) : '';
+                                        $edit_link    = $post_id > 0 ? get_edit_post_link( $post_id ) : '';
+                                        $code         = (string) ( $error_detail['code'] ?? '' );
+                                        $message      = (string) ( $error_detail['message'] ?? '' );
+                                        ?>
+                                        <li>
+                                            <?php if ( '' !== $label ) : ?>
+                                                <?php if ( $edit_link ) : ?>
+                                                    <a href="<?php echo esc_url( $edit_link ); ?>"><?php echo esc_html( $label ); ?></a>
+                                                <?php else : ?>
+                                                    <?php echo esc_html( $label ); ?>
+                                                <?php endif; ?>
+                                                <?php if ( ! empty( $error_detail['post_type'] ) || ! empty( $error_detail['status'] ) ) : ?>
+                                                    <span class="description"><?php echo esc_html( implode( ' / ', array_filter( array( (string) ( $error_detail['post_type'] ?? '' ), (string) ( $error_detail['status'] ?? '' ) ) ) ) ); ?></span>
+                                                <?php endif; ?>
+                                                <br />
+                                            <?php endif; ?>
+                                            <?php if ( '' !== $code ) : ?>
+                                                <code><?php echo esc_html( $code ); ?></code>
+                                            <?php endif; ?>
+                                            <?php echo esc_html( '' !== $message ? $message : __( 'Unknown error', 'mxp-local-search' ) ); ?>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ol>
+                            </div>
+                        <?php elseif ( (int) ( $operation_status['errors'] ?? 0 ) > 0 ) : ?>
+                            <br /><span class="description"><?php esc_html_e( 'This operation was recorded before error details were available. Future runs will list the affected posts and messages here.', 'mxp-local-search' ); ?></span>
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endif; ?>

@@ -348,19 +348,19 @@ final class MXP_Local_Search_Admin {
             if ( 'mxp_search_write_locked' === $result->get_error_code() ) {
                 $scheduled = $this->schedule_post_reindex( $post_id );
                 if ( is_wp_error( $scheduled ) ) {
-                    $this->index_manager->record_operation_status( 'single_post', 'failed', array( 'message' => $scheduled->get_error_message(), 'completed_at' => time() ) );
+                    $this->index_manager->record_operation_status( 'single_post', 'failed', array( 'message' => $scheduled->get_error_message(), 'summary' => array( 'indexed' => 0, 'deleted' => 0, 'errors' => array( $this->post_status_error_detail( $post_id, $scheduled ) ) ), 'completed_at' => time() ) );
                     $args['mxp_error'] = rawurlencode( $scheduled->get_error_message() );
                 } else {
                     $this->index_manager->record_operation_status( 'single_post', 'scheduled', array( 'message' => __( 'Post reindex is queued because MXP is currently running another write job.', 'mxp-local-search' ), 'completed_at' => time() ) );
                     $args['mxp_post_scheduled'] = '1';
                 }
             } else {
-                $this->index_manager->record_operation_status( 'single_post', 'failed', array( 'message' => $result->get_error_message(), 'completed_at' => time() ) );
+                $this->index_manager->record_operation_status( 'single_post', 'failed', array( 'message' => $result->get_error_message(), 'summary' => array( 'indexed' => 0, 'deleted' => 0, 'errors' => array( $this->post_status_error_detail( $post_id, $result ) ) ), 'completed_at' => time() ) );
                 $args['mxp_error'] = rawurlencode( $result->get_error_message() );
             }
         } else {
             $status = (string) ( $result['status'] ?? 'indexed' );
-            $this->index_manager->record_operation_status( 'single_post', 'completed', array( 'message' => __( 'Single post indexing completed.', 'mxp-local-search' ), 'summary' => array( 'indexed' => ( 'indexed' === $status ? 1 : 0 ), 'deleted' => (int) ( $result['deleted'] ?? 0 ), 'errors' => array() ), 'completed_at' => time() ) );
+            $this->index_manager->record_operation_status( 'single_post', 'completed', array( 'message' => __( 'Single post indexing completed.', 'mxp-local-search' ), 'summary' => array( 'indexed' => ( 'indexed' === $status ? 1 : 0 ), 'deleted' => (int) ( $result['deleted'] ?? 0 ), 'errors' => array(), 'deleted_details' => (array) ( $result['deleted_details'] ?? array() ) ), 'completed_at' => time() ) );
             if ( in_array( $status, array( 'deleted_non_indexable', 'deleted_empty' ), true ) ) {
                 $args['mxp_post_excluded'] = '1';
             } else {
@@ -372,6 +372,23 @@ final class MXP_Local_Search_Admin {
         $redirect_to = wp_validate_redirect( $redirect_to, get_edit_post_link( $post_id, 'url' ) );
         wp_safe_redirect( add_query_arg( $args, $redirect_to ) );
         exit;
+    }
+
+    private function post_status_error_detail( int $post_id, WP_Error $error ): array {
+        $detail = array(
+            'post_id' => $post_id,
+            'code'    => $error->get_error_code(),
+            'message' => $error->get_error_message(),
+        );
+        $post   = get_post( $post_id );
+        if ( $post instanceof WP_Post ) {
+            $title               = get_the_title( $post );
+            $detail['title']     = '' !== $title ? $title : (string) $post->post_title;
+            $detail['post_type'] = (string) $post->post_type;
+            $detail['status']    = (string) $post->post_status;
+        }
+
+        return $detail;
     }
 
     private function schedule_post_reindex( int $post_id ): bool|WP_Error {

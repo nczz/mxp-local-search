@@ -46,14 +46,14 @@ final class MXP_Local_Search_Index_Manager {
                 return $deleted;
             }
 
-            return array( 'status' => 'deleted_non_indexable', 'deleted' => $deleted );
+            return array( 'status' => 'deleted_non_indexable', 'deleted' => $deleted, 'deleted_details' => array( $this->status_post_entry( $post, array( 'reason' => 'deleted_non_indexable', 'chunks_deleted' => (int) $deleted ) ) ) );
         }
 
         $extracted = $this->extractor->extract( $post );
         $chunks    = $this->chunker->chunk( $post, $extracted );
         if ( empty( $chunks ) ) {
             $deleted = $this->delete_post_chunks_unlocked( $store, $post->ID, $post );
-            return is_wp_error( $deleted ) ? $deleted : array( 'status' => 'deleted_empty', 'deleted' => $deleted );
+            return is_wp_error( $deleted ) ? $deleted : array( 'status' => 'deleted_empty', 'deleted' => $deleted, 'deleted_details' => array( $this->status_post_entry( $post, array( 'reason' => 'deleted_empty', 'chunks_deleted' => (int) $deleted ) ) ) );
         }
 
         $doc_id       = $this->document_id( $post );
@@ -121,7 +121,7 @@ final class MXP_Local_Search_Index_Manager {
                 $post_type = isset( $args['post_type'] ) && '' !== $args['post_type'] ? sanitize_key( (string) $args['post_type'] ) : '';
                 $batch     = isset( $args['batch'] ) ? max( 1, min( 500, absint( $args['batch'] ) ) ) : (int) $this->config->get( 'batch_size', 50 );
                 $types     = $post_type ? array( $post_type ) : (array) $this->config->get( 'post_types', array( 'post', 'page' ) );
-                $summary   = array( 'indexed' => 0, 'deleted' => 0, 'errors' => array() );
+                $summary   = array( 'indexed' => 0, 'deleted' => 0, 'errors' => array(), 'deleted_details' => array() );
 
                 foreach ( $types as $type ) {
                     if ( ! in_array( $type, (array) $this->config->get( 'post_types', array() ), true ) ) {
@@ -149,15 +149,16 @@ final class MXP_Local_Search_Index_Manager {
 
                             $post = get_post( $post_id );
                             if ( ! $post ) {
-                                $summary['errors'][] = array( 'post_id' => (int) $post_id, 'code' => 'mxp_search_post_missing', 'message' => __( 'Post not found.', 'mxp-local-search' ) );
+                                $summary['errors'][] = $this->status_error_entry( (int) $post_id, null, 'mxp_search_post_missing', __( 'Post not found.', 'mxp-local-search' ) );
                                 continue;
                             }
 
                             $result = $this->index_post_unlocked( $store, $post );
                             if ( is_wp_error( $result ) ) {
-                                $summary['errors'][] = array( 'post_id' => (int) $post_id, 'code' => $result->get_error_code(), 'message' => $result->get_error_message() );
+                                $summary['errors'][] = $this->status_error_entry( (int) $post_id, $post, $result->get_error_code(), $result->get_error_message() );
                             } elseif ( isset( $result['status'] ) && str_starts_with( (string) $result['status'], 'deleted' ) ) {
                                 ++$summary['deleted'];
+                                $summary['deleted_details'] = array_merge( $summary['deleted_details'], (array) ( $result['deleted_details'] ?? array( $this->status_post_entry( $post, array( 'reason' => (string) $result['status'], 'chunks_deleted' => (int) ( $result['deleted'] ?? 0 ) ) ) ) ) );
                             } else {
                                 ++$summary['indexed'];
                             }
@@ -197,22 +198,90 @@ final class MXP_Local_Search_Index_Manager {
     }
 
     public function record_operation_status( string $operation, string $status, array $details = array() ): void {
-        $summary = isset( $details['summary'] ) && is_array( $details['summary'] ) ? $details['summary'] : array();
-        $message = isset( $details['message'] ) ? sanitize_text_field( (string) $details['message'] ) : '';
-        $payload = array(
-            'operation'     => sanitize_key( $operation ),
-            'status'        => sanitize_key( $status ),
-            'message'       => $message,
-            'indexed'       => isset( $summary['indexed'] ) ? (int) $summary['indexed'] : null,
-            'deleted'       => isset( $summary['deleted'] ) ? (int) $summary['deleted'] : null,
-            'errors'        => isset( $summary['errors'] ) && is_array( $summary['errors'] ) ? count( $summary['errors'] ) : 0,
-            'scheduled_for' => isset( $details['scheduled_for'] ) ? absint( $details['scheduled_for'] ) : null,
-            'started_at'    => isset( $details['started_at'] ) ? absint( $details['started_at'] ) : null,
-            'completed_at'  => isset( $details['completed_at'] ) ? absint( $details['completed_at'] ) : null,
-            'updated_at'    => time(),
+        $summary         = isset( $details['summary'] ) && is_array( $details['summary'] ) ? $details['summary'] : array();
+        $message         = isset( $details['message'] ) ? sanitize_text_field( (string) $details['message'] ) : '';
+        $error_details   = $this->sanitize_status_details( $summary['errors'] ?? array() );
+        $deleted_details = $this->sanitize_status_details( $summary['deleted_details'] ?? array() );
+        $payload         = array(
+            'operation'       => sanitize_key( $operation ),
+            'status'          => sanitize_key( $status ),
+            'message'         => $message,
+            'indexed'         => isset( $summary['indexed'] ) ? (int) $summary['indexed'] : null,
+            'deleted'         => isset( $summary['deleted'] ) ? (int) $summary['deleted'] : null,
+            'errors'          => isset( $summary['errors'] ) && is_array( $summary['errors'] ) ? count( $summary['errors'] ) : 0,
+            'error_details'   => $error_details,
+            'deleted_details' => $deleted_details,
+            'scheduled_for'   => isset( $details['scheduled_for'] ) ? absint( $details['scheduled_for'] ) : null,
+            'started_at'      => isset( $details['started_at'] ) ? absint( $details['started_at'] ) : null,
+            'completed_at'    => isset( $details['completed_at'] ) ? absint( $details['completed_at'] ) : null,
+            'updated_at'      => time(),
         );
 
         update_option( MXP_LOCAL_SEARCH_STATUS_OPTION, array_filter( $payload, static fn( $value ) => null !== $value ), false );
+    }
+
+    private function status_error_entry( int $post_id, ?WP_Post $post, string $code, string $message ): array {
+        $entry = array(
+            'post_id' => $post_id,
+            'code'    => $code,
+            'message' => $message,
+        );
+
+        if ( $post instanceof WP_Post ) {
+            $entry = array_merge( $entry, $this->status_post_entry( $post ) );
+        }
+
+        return $entry;
+    }
+
+    private function status_post_entry( WP_Post $post, array $extra = array() ): array {
+        $title = get_the_title( $post );
+        if ( '' === $title ) {
+            $title = (string) $post->post_title;
+        }
+
+        return array_merge(
+            array(
+                'post_id'   => (int) $post->ID,
+                'post_type' => (string) $post->post_type,
+                'status'    => (string) $post->post_status,
+                'title'     => $title,
+            ),
+            $extra
+        );
+    }
+
+    private function sanitize_status_details( array $details, int $limit = 25 ): array {
+        $sanitized = array();
+        foreach ( $details as $detail ) {
+            if ( count( $sanitized ) >= $limit ) {
+                break;
+            }
+
+            if ( is_scalar( $detail ) ) {
+                $sanitized[] = array( 'message' => sanitize_text_field( (string) $detail ) );
+                continue;
+            }
+
+            if ( ! is_array( $detail ) ) {
+                continue;
+            }
+
+            $entry = array();
+            foreach ( $detail as $key => $value ) {
+                $key = sanitize_key( (string) $key );
+                if ( '' === $key || is_array( $value ) || is_object( $value ) ) {
+                    continue;
+                }
+                $entry[ $key ] = is_int( $value ) ? $value : sanitize_text_field( (string) $value );
+            }
+
+            if ( ! empty( $entry ) ) {
+                $sanitized[] = $entry;
+            }
+        }
+
+        return $sanitized;
     }
 
     public function handle_config_changed( array $old_settings, array $new_settings ): bool|WP_Error {
@@ -265,7 +334,7 @@ final class MXP_Local_Search_Index_Manager {
         $old_types = array_map( 'sanitize_key', (array) ( $old_settings['post_types'] ?? array() ) );
         $new_types = array_map( 'sanitize_key', (array) ( $new_settings['post_types'] ?? array() ) );
         $disabled  = array_diff( $old_types, $new_types );
-        $summary   = array( 'indexed' => 0, 'deleted' => 0, 'errors' => array() );
+        $summary   = array( 'indexed' => 0, 'deleted' => 0, 'errors' => array(), 'deleted_details' => array() );
 
         foreach ( $disabled as $type ) {
             $ids = get_posts(
@@ -277,11 +346,19 @@ final class MXP_Local_Search_Index_Manager {
                 )
             );
             foreach ( $ids as $post_id ) {
-                $deleted = $this->delete_post_chunks( (int) $post_id, get_post( $post_id ) ?: null );
+                $post    = get_post( $post_id );
+                $deleted = $this->delete_post_chunks( (int) $post_id, $post instanceof WP_Post ? $post : null );
                 if ( is_wp_error( $deleted ) ) {
-                    $summary['errors'][] = array( 'post_id' => (int) $post_id, 'code' => $deleted->get_error_code(), 'message' => $deleted->get_error_message() );
+                    $summary['errors'][] = $this->status_error_entry( (int) $post_id, $post instanceof WP_Post ? $post : null, $deleted->get_error_code(), $deleted->get_error_message() );
                 } else {
                     $summary['deleted'] += (int) $deleted;
+                    if ( (int) $deleted > 0 ) {
+                        if ( $post instanceof WP_Post ) {
+                            $summary['deleted_details'][] = $this->status_post_entry( $post, array( 'reason' => 'post_type_disabled', 'chunks_deleted' => (int) $deleted ) );
+                        } else {
+                            $summary['deleted_details'][] = array( 'post_id' => (int) $post_id, 'reason' => 'post_type_disabled', 'chunks_deleted' => (int) $deleted );
+                        }
+                    }
                 }
             }
         }
@@ -295,6 +372,7 @@ final class MXP_Local_Search_Index_Manager {
         $summary['indexed'] += (int) ( $indexed['indexed'] ?? 0 );
         $summary['deleted'] += (int) ( $indexed['deleted'] ?? 0 );
         $summary['errors']   = array_merge( $summary['errors'], (array) ( $indexed['errors'] ?? array() ) );
+        $summary['deleted_details'] = array_merge( $summary['deleted_details'], (array) ( $indexed['deleted_details'] ?? array() ) );
 
         $this->record_operation_status(
             'config_reindex',

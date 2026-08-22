@@ -1,5 +1,13 @@
 msgid ""
 msgstr ""
+"Project-Id-Version: MXP Local Search 0.1.1\n"
+"PO-Revision-Date: 2026-08-22 00:00+0000\n"
+"Last-Translator: MXP Local Search\n"
+"Language-Team: Chinese (Taiwan)\n"
+"Language: zh_TW\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
 
 msgid "%d documents / %d chunks"
 msgstr "%d 份文件 / %d 個片段"
@@ -43,6 +51,9 @@ msgstr "WordPress 內建搜尋"
 msgid "Built-in search replacement"
 msgstr "內建搜尋接管"
 
+msgid "Chunks removed: %d"
+msgstr "已移除片段：%d"
+
 msgid "Chunk strategy"
 msgstr "切片策略"
 
@@ -69,6 +80,12 @@ msgstr "自訂欄位允許清單"
 
 msgid "Deep mode requires the mxp_search reranker feature."
 msgstr "deep 模式需要 mxp_search reranker 功能。"
+
+msgid "Deleted items"
+msgstr "已刪除項目"
+
+msgid "Errors"
+msgstr "錯誤"
 
 msgid "Exclude this post from MXP Local Search"
 msgstr "從 MXP 本機搜尋排除此文章"
@@ -222,6 +239,9 @@ msgstr "單篇重建索引已排入佇列，因為 MXP 目前正在執行其他�
 
 msgid "Post reindex is waiting for the current MXP write job to finish."
 msgstr "單篇重建索引正在等待目前的 MXP 寫入作業完成。"
+msgid "Post #%d"
+msgstr "文章 #%d"
+
 
 msgid "Post types"
 msgstr "內容類型"
@@ -345,12 +365,21 @@ msgstr "指定的 MXP 本機搜尋路徑上層目錄不存在。"
 
 msgid "This dynamic block renders related articles on the front end using the MXP Local Search index."
 msgstr "這個動態區塊會在前台使用 MXP 本機搜尋索引呈現相關文章。"
+msgid "This operation was recorded before deleted-item details were available."
+msgstr "這次操作是在刪除明細功能可用前記錄的。"
+
+msgid "This operation was recorded before error details were available. Future runs will list the affected posts and messages here."
+msgstr "這次操作是在錯誤明細功能可用前記錄的。未來執行會在這裡列出受影響的文章與錯誤訊息。"
+
 
 msgid "Too many MXP Local Search requests."
 msgstr "MXP 本機搜尋請求過多。"
 
 msgid "Unknown MXP Local Search fields: %s"
 msgstr "未知的 MXP 本機搜尋欄位：%s"
+msgid "Unknown error"
+msgstr "未知錯誤"
+
 
 msgid "Use this for one-off fixes after editing important content. Global settings and public visibility still apply."
 msgstr "編輯重要內容後，可用於單次修正。全域設定與公開可見性仍會套用。"

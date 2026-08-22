@@ -86,12 +86,29 @@ final class MXP_Local_Search_Hooks {
                 return;
             }
 
-            $this->index_manager->record_operation_status( 'single_post', 'failed', array( 'message' => $result->get_error_message(), 'started_at' => $started_at, 'completed_at' => time() ) );
+            $this->index_manager->record_operation_status( 'single_post', 'failed', array( 'message' => $result->get_error_message(), 'summary' => array( 'indexed' => 0, 'deleted' => 0, 'errors' => array( $this->post_status_error_detail( $post_id, $result ) ) ), 'started_at' => $started_at, 'completed_at' => time() ) );
             return;
         }
 
         $status = (string) ( $result['status'] ?? 'indexed' );
-        $this->index_manager->record_operation_status( 'single_post', 'completed', array( 'message' => __( 'Single post indexing completed.', 'mxp-local-search' ), 'summary' => array( 'indexed' => ( 'indexed' === $status ? 1 : 0 ), 'deleted' => (int) ( $result['deleted'] ?? 0 ), 'errors' => array() ), 'started_at' => $started_at, 'completed_at' => time() ) );
+        $this->index_manager->record_operation_status( 'single_post', 'completed', array( 'message' => __( 'Single post indexing completed.', 'mxp-local-search' ), 'summary' => array( 'indexed' => ( 'indexed' === $status ? 1 : 0 ), 'deleted' => (int) ( $result['deleted'] ?? 0 ), 'errors' => array(), 'deleted_details' => (array) ( $result['deleted_details'] ?? array() ) ), 'started_at' => $started_at, 'completed_at' => time() ) );
+    }
+
+    private function post_status_error_detail( int $post_id, WP_Error $error ): array {
+        $detail = array(
+            'post_id' => $post_id,
+            'code'    => $error->get_error_code(),
+            'message' => $error->get_error_message(),
+        );
+        $post   = get_post( $post_id );
+        if ( $post instanceof WP_Post ) {
+            $title               = get_the_title( $post );
+            $detail['title']     = '' !== $title ? $title : (string) $post->post_title;
+            $detail['post_type'] = (string) $post->post_type;
+            $detail['status']    = (string) $post->post_status;
+        }
+
+        return $detail;
     }
 
     public function updated_option( string $option, $old_value, $value ): void {

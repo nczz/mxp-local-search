@@ -3,7 +3,7 @@ Contributors: mxp
 Tags: search, semantic search, local search, full-text search
 Requires at least: 6.4
 Requires PHP: 8.1
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 

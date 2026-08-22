@@ -3,7 +3,7 @@
  * Plugin Name: MXP Local Search
  * Description: Local semantic and full-text search for WordPress using the mxp_search PHP extension.
  * Plugin URI: https://github.com/nczz/mxp-local-search
- * Version: 0.1.0
+ * Version: 0.1.1
  * Requires PHP: 8.1
  * Author: MXP
  * Author URI: https://github.com/nczz
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'MXP_LOCAL_SEARCH_VERSION', '0.1.0' );
+define( 'MXP_LOCAL_SEARCH_VERSION', '0.1.1' );
 define( 'MXP_LOCAL_SEARCH_FILE', __FILE__ );
 define( 'MXP_LOCAL_SEARCH_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MXP_LOCAL_SEARCH_URL', plugin_dir_url( __FILE__ ) );
